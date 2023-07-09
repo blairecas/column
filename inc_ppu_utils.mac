@@ -1,0 +1,198 @@
+LinesTable = 1130	; lines table addr in PPU
+
+; set registers for vram usage
+SetVreg:
+	mov	#177010, R4		; R4 = vaddr reg
+	mov	#177012, R5		; R5 = vdata reg
+	return
+
+; draws a tile
+; R0 = tile #, R1 = X (chars), R2 = Y (R1 must be EVEN)
+DrawTile:
+	asl	R2			; get vaddr of line start by Y
+	asl	R2
+	add	LinesTable(R2), R1	; add to X - now R1 is our vaddr
+	ash	#5., R0			; tile offset (tiles in PPU is 32 bytes)
+	add	#TilesPpuData, R0
+	mov	#40., R2		; vaddr addition (next line)
+	.rept	16.
+	mov	(R0)+, (R1)
+	add	R2, R1
+	.endr
+	return
+
+; draws floating palka tile
+; R0 = tile #, R1 = X, R2 = Y
+DrawPalkaTile:
+	tst	R2			; starting from negative Y?
+	blt	99$			; exit if so
+	; get tile addr
+	ash	#5., R0
+	add	#TilesPpuData, R0
+	; get vaddr
+	mov	R2, R3
+	asl	R3
+	asl	R3
+	add	LinesTable(R3), R1
+	; skip undrawable
+	mov	#16., R3
+10$:	cmp	R2, #STAKAN_START_Y
+	bge	20$
+	inc	R2			; Y++
+	add	#40., R1		; next vaddr
+	add	#2, R0			; inc tile line
+	dec	R3
+	beq	99$
+	br	10$
+20$:	; draw drawable
+	mov	#40., R2		; vaddr addition
+30$:	mov	(R0)+, (R1)
+	add	R2, R1
+	sob	R3, 30$
+99$:	return
+
+; draws black palka lines
+; R1 = X, R2 = Y, R3 = DY
+DrawBlackTile:
+	tst	R3			; maybe nothing to draw?
+	beq	99$			; exit if so
+	asl	R2
+	asl	R2
+	add	LinesTable(R2), R1
+	mov	#40., R2
+10$:	clr	(R1)
+	add	R2, R1
+	sob	R3, 10$
+99$:	return
+
+; lzsa3 decompressing routines by manwe & ivanq
+; https://github.com/imachug/lzsa3
+
+; get byte -> R1 from vram and advance vram # var
+GetB00:	mov	#100000, @#177010
+GetA00  =: GetB00 + 2
+	inc	GetA00
+	movb	@#177012, R1
+	return
+
+; put R1 -> byte to vram and advance vram # var
+PutB00:	mov	#100000, @#177010
+PutA00 =: PutB00 + 2
+	inc	PutA00
+	movb	R1, @#177012
+	return
+
+; VRAM -> VRAM
+Unpa02:	CLR	R5		; no nibbles sign
+10$:	call	GetB00		; +
+	movb	R1, R3		; + movb (R1)+, R3
+	MOV	R3, R0
+	BIC	#177774, R0	; get 2 bits
+	BEQ	25$
+	CMP	R0, #3		; literals length
+	BNE	20$
+	CALL	65$
+20$:	call	GetB00		; +
+	call	PutB00		; + movb (R1)+, (R2)+
+	SOB	R0, 20$
+25$:	MOV	R3, -(SP)
+	ROLB	R3		; get 2 bits
+	ROL	R0
+	ROLB	R3
+	ROL	R0
+	ASL	R0
+	ADD	R0, PC		; run subroutine
+	BR	55$
+	BR	45$
+	BR	50$
+	CALL	60$		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+30$:	MOV	R0, R4		; save offset for future
+35$:	MOV	(SP)+, R0
+	ASR	R0
+	ASR	R0
+	BIC	#177770, R0	; get 3 bits
+	CMP	R0, #7
+	BNE	40$
+	CALL	65$
+	TSTB	R0		; match length
+	BEQ	99$
+40$:	; copy (dest-r4) -> (dest)
+	mov	PutA00, R1
+	sub	R4, R1
+	mov	R1, @#177010
+	movb	@#177012, R1
+	call	PutB00
+	inc	R0
+1$:	mov	PutA00, R1
+	sub	R4, R1
+	mov	R1, @#177010
+	movb	@#177012, R1
+	call	PutB00
+	sob	R0, 1$
+	BR	10$
+45$:	CLR	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+	BR	30$
+50$:	CALL	60$ 		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ADD	#513., R0
+	BR	30$
+55$:	ROLB	R3
+	BCS	35$
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BR	30$
+60$:	COM	R5
+	BMI	2$
+	MOV	R5, R0
+	CLR	R5
+	BR	3$
+2$:	call	GetB00		; +
+	bicb	R1, R5		; + bicb (R1)+, R5
+	MOV	R5, R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+3$:	BIC	#177760, R0	; leave 4 low bits
+	RETURN
+65$:	MOV	R0, -(SP)	; save original value
+	CALL	60$ 		; get nibble in R0
+	BNE	75$
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BNE	70$
+	; unnecessary for short files
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	inc	SP		; skip saved R0
+	inc	SP
+	return
+70$:	ADD	#15., R0
+75$:	DEC	R0
+	ADD	(SP)+, R0	; add original value
+99$:	return
+
+; draw background to vram
+DrawBack:
+	mov	#100000, PutA00
+	mov	#PpuBgr, GetA00
+	call	Unpa02
+	return

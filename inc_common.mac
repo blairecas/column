@@ -1,0 +1,65 @@
+; //////////////////////////////////////////////////////////////////////////////
+; PPU commands constants
+; //////////////////////////////////////////////////////////////////////////////
+
+CmdClearUpper	  =  1.		; clear upper PPU RAM
+CmdUpdPalette	  =  2.		; set palette, cursor, resolution, luminance
+CmdFixWait	  =  3.		; write PPU empty cycles count to CPU
+CmdRtiToCpu	  =  4.		; write PPU empty INTs count to CPU
+CmdSoundPlay	  =  5.		; start sound (R0 - sound ID)
+CmdMusicPlay	  =  6.		; start music (R0 - tune ID)
+CmdSoundOnOff	  =  7.		; sets sound on or off
+CmdDrawTile       =  8.		; draw tile 
+CmdDrawPalkaTile  =  9.		; draw floating palka tile
+CmdDrawBlackTile  = 10.         ; draw black lines tile
+CmdDrawBack       = 11.		; unpack blue background plane-0 to vram
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Drawing 
+; //////////////////////////////////////////////////////////////////////////////
+
+VADDR  = 100000			; lines table first line pointing to
+SCRWID = 40.			; screen width in 8-pix
+
+STAKAN_START_X = 14.
+STAKAN_START_Y = 48.
+
+; //////////////////////////////////////////////////////////////////////////////	
+; // CPU<->PPU exchange variables
+; //////////////////////////////////////////////////////////////////////////////
+
+CmdBuffer	= 176000	; CPU<->PPU commands buffer (!) in CPU VRAM (!)
+
+; Addrs are in CPU RAM - to use in PPU make sure they are <ADDR/2>
+
+; Keyboard
+Key8		= 157712	; Key 8
+Key7		= 157714	; key 7
+Key6		= 157716	; key 6
+Key5		= 157720	; key 5
+Key4		= 157722	; key 4
+Key3		= 157724	; key 3
+Key2		= 157726	; key 2
+Key1		= 157730	; key 1
+KeyK2		= 157732	; key K2
+KeyK1		= 157734	; key K1
+KeyStop		= 157736	; key STOP
+KeyUst		= 157740	; key UST
+KeyShift	= 157742	; key SHIFT
+KeyEnter	= 157744	; key ENTER
+KeySpace	= 157746	; key SPACE
+KeyRight	= 157750	; key ->
+KeyLeft		= 157752	; key <-
+KeyDown		= 157754	; key DOWN
+KeyUp		= 157756	; key UP
+KeyCombo	= 157760	; combo was pressed
+KeyAny		= 157762	; key 'anykey'
+KeyCurrent	= 157764	; current key
+
+; Misc
+PpuRtiCount2	= 157766	; interrupts count in PPU
+PpuWaitCount	= 157770	; PPU wait cycles number
+VSyncCount1	= 157772	; vsync 2 counter
+VSyncCount2	= 157774	; vsync 1 counter
+
+PPUState	= 157776	; PPU state

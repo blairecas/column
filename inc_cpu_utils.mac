@@ -1,0 +1,604 @@
+LinesTable:
+	.word	100000, 100050, 100120, 100170, 100240, 100310, 100360, 100430, 100500, 100550, 100620, 100670, 100740, 101010, 101060, 101130
+	.word	101200, 101250, 101320, 101370, 101440, 101510, 101560, 101630, 101700, 101750, 102020, 102070, 102140, 102210, 102260, 102330
+	.word	102400, 102450, 102520, 102570, 102640, 102710, 102760, 103030, 103100, 103150, 103220, 103270, 103340, 103410, 103460, 103530
+	.word	103600, 103650, 103720, 103770, 104040, 104110, 104160, 104230, 104300, 104350, 104420, 104470, 104540, 104610, 104660, 104730
+	.word	105000, 105050, 105120, 105170, 105240, 105310, 105360, 105430, 105500, 105550, 105620, 105670, 105740, 106010, 106060, 106130
+	.word	106200, 106250, 106320, 106370, 106440, 106510, 106560, 106630, 106700, 106750, 107020, 107070, 107140, 107210, 107260, 107330
+	.word	107400, 107450, 107520, 107570, 107640, 107710, 107760, 110030, 110100, 110150, 110220, 110270, 110340, 110410, 110460, 110530
+	.word	110600, 110650, 110720, 110770, 111040, 111110, 111160, 111230, 111300, 111350, 111420, 111470, 111540, 111610, 111660, 111730
+	.word	112000, 112050, 112120, 112170, 112240, 112310, 112360, 112430, 112500, 112550, 112620, 112670, 112740, 113010, 113060, 113130
+	.word	113200, 113250, 113320, 113370, 113440, 113510, 113560, 113630, 113700, 113750, 114020, 114070, 114140, 114210, 114260, 114330
+	.word	114400, 114450, 114520, 114570, 114640, 114710, 114760, 115030, 115100, 115150, 115220, 115270, 115340, 115410, 115460, 115530
+	.word	115600, 115650, 115720, 115770, 116040, 116110, 116160, 116230, 116300, 116350, 116420, 116470, 116540, 116610, 116660, 116730
+	.word	117000, 117050, 117120, 117170, 117240, 117310, 117360, 117430, 117500, 117550, 117620, 117670, 117740, 120010, 120060, 120130
+	.word	120200, 120250, 120320, 120370, 120440, 120510, 120560, 120630, 120700, 120750, 121020, 121070, 121140, 121210, 121260, 121330
+	.word	121400, 121450, 121520, 121570, 121640, 121710, 121760, 122030, 122100, 122150, 122220, 122270, 122340, 122410, 122460, 122530
+	.word	122600, 122650, 122720, 122770, 123040, 123110, 123160, 123230, 123300, 123350, 123420, 123470, 123540, 123610, 123660, 123730
+	.word	124000, 124050, 124120, 124170, 124240, 124310, 124360, 124430, 124500, 124550, 124620, 124670, 124740, 125010, 125060, 125130
+	.word	125200, 125250, 125320, 125370, 125440, 125510, 125560, 125630, 125700, 125750, 126020, 126070, 126140, 126210, 126260, 126330 
+
+; registers for accessing vram (or ram12)
+SetVreg:
+	mov	#176640, R4
+	mov	#176642, R5
+	return	
+
+; //////////////////////////////////////////////////////////////////////////////
+; // CPU <-> PPU 
+; //////////////////////////////////////////////////////////////////////////////
+
+; PPU message
+PPMSG:	.word	PPARR			; address of beginning of array
+        .word	177777			; end of transmission
+
+; PPU data exchange array
+PPARR:	.byte	0			; return value (0 - OK)
+PPCMD:	.byte	0			; command
+	.word	32			; device type (32 - PPU mem)
+PPAPP:	.word	0			; address for PPU
+PPACP:	.word	0			; address for CPU
+PPLEN:	.word	0			; length in words
+
+; send command to PPU with exch array
+PPSEN:	mov	#PPMSG, R0		; array address
+	mov	#5, R1			; bytes to send+1 (sending from @#PP_MSG)
+	br	1$
+2$:	movb	(R0)+, @#176676
+1$:	tstb	@#176674		; test if we are ready to send
+	bpl	1$			; cycle if >= 0 (not set last bit in byte)
+	sob	R1, 2$
+	return
+
+; send and start PPU code
+; R4 - start addr in CPU
+; R5 - length / 2
+PPRUN:	movb	#1, PPCMD		; 1 - allocate memory
+	mov	R5, PPLEN
+	call	PPSEN			; (!) warn - no testing for success
+	movb	#20, PPCMD		; 20 - write to PPU mem
+	mov	R5, PPLEN
+	mov 	R4, PPACP
+	call	PPSEN
+	movb	#30, PPCMD		; 30 - run
+	call	PPSEN
+	return 
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU Loader
+; //////////////////////////////////////////////////////////////////////////////
+
+; (!) this code will run in PPU
+PPULoaderStart:
+	mtps	#200
+	; relocate code to the top of RAM
+	mov	PC, R0
+	add	#10$-., R0
+	mov	#77400, R1
+	mov	#200, R3
+	mov	(R0)+, (R1)+
+	sob	R3, .-2
+	jmp	@#77400
+10$:	; copy nearly all VRAM -> RAM
+	mov	#177010, R4
+	mov	#177014, R5
+	mov	#100000, (R4)		; from vaddr = 100000
+	clr	R0			; to addr = 0
+	mov	#37600, R3		; 
+	mov	(R5), (R0)+
+	inc	(R4)
+	sob	R3, .-4
+	mov	#1000, SP		; stack on 1000
+	jmp	(SP)			; jump there
+PPULoaderEnd:
+
+; send PPU code to VRAM and start PPU Loader
+StartPPU:
+	; put PPU code to VRAM
+	call	SetVreg
+	; clear vram first
+	mov	#100000, (R4)
+	mov	#40000, R3
+	clr	(R5)
+	inc	(R4)
+	sob	R3, .-4
+	; copy end of file to vram
+	mov	#PPUStart, R0
+	mov	#PPUEnd-PPUStart/2, R3
+	mov	#100000, (R4)
+	mov	(R0)+, (R5)
+	inc	(R4)
+	sob	R3, .-4
+	; start PPU launcher code
+	mov	#PPULoaderStart, R4
+	mov	#<PPULoaderEnd-PPULoaderStart/2>, R5
+	call	PPRUN 
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Commands to PPU
+; //////////////////////////////////////////////////////////////////////////////
+
+CmdAddr:	.WORD	0		; addr in ppu command buffer
+
+; wait for queue complete
+PPUWait:
+	mov	#CmdBuffer, @#176640
+	tst	@#176642		; check commands buffer
+	bne	PPUWait			; still not ready
+	mov	#<CmdBuffer+1>, CmdAddr
+	return
+
+; ask PPU to process command buffer
+PPUFinish:
+	mov	CmdAddr, @#176640
+	clr	@#176642		; last command is STOP
+	mov	#CmdBuffer, @#176640
+	inc	@#176642		; start execution in PPU
+	return
+	
+; add command to PPU queue, R5-command, R0..R4 params
+PPUAdd: mov	R0, -(SP)		; save R0, R1
+	mov	R1, -(SP)
+	mov	#176640, R0
+	mov	#176642, R1
+	mov	CmdAddr, (R0)
+	mov	R5, (R1)		; command
+	inc	(R0)
+	mov	2(SP), (R1)		; parameters: R0
+	inc	(R0)
+	mov	(SP), (R1)		; R1
+	inc	(R0)
+	mov	R2, (R1)		; ...
+	inc	(R0)
+	mov	R3, (R1)
+	inc	(R0)
+	mov	R4, (R1)
+	inc	(R0)
+	clr	(R1)
+	add	#6., CmdAddr
+	mov	(SP)+, R1		; restore R1, R0
+	mov	(SP)+, R0
+	return
+
+; execute command in PPU, R5-command, R0..R4 params
+PPUExecute:
+	call	PPUWait
+	call	PPUAdd
+	call	PPUFinish
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Printing
+; //////////////////////////////////////////////////////////////////////////////
+
+; 4x5 numbers (aligned by 8 bytes)
+SprNumbers45:
+	.BYTE	7,5,5,5,7,0,0,0, 2,2,2,2,2,0,0,0
+	.BYTE	7,4,7,1,7,0,0,0, 7,4,6,4,7,0,0,0
+	.BYTE	5,5,7,4,4,0,0,0, 7,1,7,4,7,0,0,0
+	.BYTE	7,1,7,5,7,0,0,0, 7,4,4,4,4,0,0,0
+	.BYTE	7,5,7,5,7,0,0,0, 7,5,7,4,7,0,0,0
+	; shifted by 4 bit
+	.BYTE	160,120,120,120,160,0,0,0, 040,040,040,040,040,0,0,0
+	.BYTE	160,100,160,020,160,0,0,0, 160,100,140,100,160,0,0,0
+	.BYTE	120,120,160,100,100,0,0,0, 160,020,160,100,160,0,0,0
+	.BYTE	160,020,160,120,160,0,0,0, 160,100,100,100,100,0,0,0
+	.BYTE	160,120,160,120,160,0,0,0, 160,120,160,100,160,0,0,0
+	
+; print binary word (4x5 font), R0-word, R1-vram addr
+PrintBinaryWord:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	R1, (R4)
+	mov	#SCRWID, R2
+	mov	#8., R3
+20$:	; first half of 8-bit vaddr
+	mov	#SprNumbers45, R1	; sprite 0
+	asl	R0
+	bcc	30$
+	add	#8., R1			; sprite 1
+30$:	movb	(R1)+, (R5)		; using only plane 1
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	sub	#SCRWID*4, (R4)		; rewind vaddr
+	; second half - shifted sprites and BIS
+	mov	#<SprNumbers45+80.>, R1
+	asl	R0
+	bcc	40$
+	add	#8., R1
+40$:	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	sub	#SCRWID*4-1, (R4)	; .. and advance vaddr
+	sob	R3, 20$
+	return	
+ 
+; print octal word (4x5 font), R0 - word, R1-vram addr
+PrintOctalWord:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	R1, (R4)
+	mov	#SCRWID, R2
+	mov	#3., R3
+	; 1st bit
+	clr	R1
+	asl	R0
+	rol	R1
+20$:	; first half of 8-bit vaddr
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#SprNumbers45, R1
+	; put bits
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	sub	#<SCRWID*4>, (R4)
+	; next 3-bits
+	clr	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1	
+	; second half - shifted sprites and BIS
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#<SprNumbers45+80.>, R1
+	; put bits
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	sub	#SCRWID*4-1, (R4)		; advance vaddr to next byte
+	; next 3-bits
+	clr	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+	sob	R3, 20$
+	return	 
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Drawing
+; //////////////////////////////////////////////////////////////////////////////
+
+; redraws full stakan
+RedrawStakan:
+	mov	#Stakan, VarAddr
+	mov	#Stakan2, VarAddr2
+	mov	#STAKAN_START_Y, VarY
+	mov	#13., TempR3
+10$:	mov	#STAKAN_START_X, VarX
+	mov	#6., TempR2
+20$:	mov	VarX, R1
+	mov	VarY, R2
+	movb	@VarAddr2, R0		; test 'removing' animation #
+	beq	30$
+	add	#11., R0		; we are removing figure
+	br	40$
+30$:	movb	@VarAddr, R0		; base tile #
+	add	TilesAddition, R0
+40$:	.ppexe	#CmdDrawTile
+	call	DrawTile
+	inc	VarAddr
+	inc	VarAddr2
+	add	#2, VarX
+	dec	TempR2
+	bne	20$
+	add	#2, VarAddr		; stakan is 8*16 but drawing space is 6*13
+	add	#2, VarAddr2
+	add	#16., VarY
+	dec	TempR3
+	bne	10$
+	return
+
+; draw one tile
+; R0 = tile #, R1 = X, R2 = Y (y-coords are 0..287, x-coords are /16pix)
+DrawTile:
+	call	SetVreg
+	asl	R2			; get vaddr of line start by Y
+	add	LinesTable(R2), R1	; add to X
+	mov	R1, (R4)		; set vaddr to (R4) vreg
+	ash	#6., R0			; tile offset (tiles in CPU is 64 bytes)
+	add	#TilesCpuData, R0
+	mov	#39., R1		; vaddr addition
+	; draw it
+	.rept	16.
+	mov	(R0)+, (R5)
+	inc	(R4)
+	mov	(R0)+, (R5)
+	add	R1, (R4)
+	.endr
+	return
+
+; draw floating figures
+DrawPalka:
+	; 1
+	mov	PalkaX, R1
+	asl	R1
+	add	#STAKAN_START_X, R1
+	mov	R1, TempR1
+	;
+	mov	PalkaY, R2
+	add	#STAKAN_START_Y, R2
+	movb	@#Palka, R0
+	call	DrawPalkaTile
+	; 2
+	mov	TempR1, R1
+	mov	PalkaY, R2
+	add	#STAKAN_START_Y+16., R2
+	movb	@#Palka+1, R0
+	call	DrawPalkaTile
+	; 3
+	mov	TempR1, R1
+	mov	PalkaY, R2
+	add	#STAKAN_START_Y+32., R2
+	movb	@#Palka+2, R0
+	call	DrawPalkaTile
+	return
+
+; draw floating tile
+; R1=X, R2=Y, R0=tile #
+DrawPalkaTile:
+	tst	R2			; starting with negative Y?
+	blt	99$			; exit if so
+	add	TilesAddition, R0
+	.ppexe	#CmdDrawPalkaTile
+	call	SetVreg
+	mov	R2, R3
+	asl	R3
+	add	LinesTable(R3), R1
+	mov	R1, (R4)
+	ash	#6., R0			; tile offset (tiles in CPU is 64 bytes)
+	add	#TilesCpuData, R0
+	; skip undrawable
+	mov	#16., R3
+10$:	cmp	R2, #STAKAN_START_Y
+	bge	20$
+	inc	R2			; Y++
+	add	#4., R0			; increase tile addr
+	add	#40., (R4)		; increase vaddr
+	dec	R3
+	beq	99$			; nothing to draw
+	br	10$
+20$:	; draw drawable %)
+	mov	#39., R1
+30$:	mov	(R0)+, (R5)
+	inc	(R4)
+	mov	(R0)+, (R5)
+	add	R1, (R4)
+	sob	R3, 30$
+99$:	return
+
+; draw black lines 
+DrawBlackTile:
+	tst	PalkaDY			; maybe nothing to draw?
+	beq	99$			; exit if so
+	mov	PalkaPrevX, R1
+	asl	R1			; palka X coord is 16-pix
+	add	#STAKAN_START_X, R1
+	mov	PalkaPrevY, R2
+	mov	PalkaDY, R3
+	; skip undrawable
+10$:	tst	R2
+	bge	20$
+	inc	R2
+	dec	R3
+	beq	99$
+	br	10$
+20$:	; draw drawable	
+	add	#STAKAN_START_Y, R2
+	.ppexe	#CmdDrawBlackTile
+	call	SetVreg
+	asl	R2
+	add	LinesTable(R2), R1
+	mov	R1, (R4)
+	mov	#39., R1
+30$:	clr	(R5)
+	inc	(R4)
+	clr	(R5)
+	add	R1, (R4)
+	sob	R3, 30$
+99$:	return
+
+; draw next figure
+DrawNext:
+	mov	#STAKAN_START_X+14., R1
+	mov	#STAKAN_START_Y, R2
+	movb	@#PalkaNext, R0
+	add	TilesAddition, R0
+	.ppexe	#CmdDrawTIle
+	call	DrawTile
+	mov	#STAKAN_START_X+14., R1
+	mov	#STAKAN_START_Y+16., R2
+	movb	@#PalkaNext+1, R0
+	add	TilesAddition, R0
+	.ppexe	#CmdDrawTIle
+	call	DrawTile
+	mov	#STAKAN_START_X+14., R1
+	mov	#STAKAN_START_Y+32., R2
+	movb	@#PalkaNext+2, R0
+	add	TilesAddition, R0
+	.ppexe	#CmdDrawTIle
+	call	DrawTile
+	return
+
+; .. it's complicated
+; .. originally was unpacking VRAM - VRAM
+; i am lazy to rewrite unpacking %) so it's quite slow for RAM - VRAM
+GetB12:	movb	@GetA12, R1
+	inc	GetA12
+	return
+GetA12:	.word	0
+GetR12:	sec
+	ror	R1
+	bcs	10$
+	mov	R1, @#176640
+	movb	@#176642, R1
+	return
+10$:	mov	R1, @#176640
+	movb	@#176643, R1
+	return
+
+; put R1 -> byte to dest vaddr and advance it
+PutB12:	mov	(PC)+, R2
+PutA12:	.word	0			; vram addr rel to 200000
+	inc	PutA12
+	sec
+	ror	R2
+	bcs	10$
+	mov	R2, @#176640
+	movb	R1, @#176642
+	return
+10$:	mov	R2, @#176640
+	movb	R1, @#176643
+	return
+
+; lzsa3 decompressing routines by manwe & ivanq
+; https://github.com/imachug/lzsa3
+
+Unpa12:	CLR	R5		; no nibbles sign
+10$:	call	GetB12		; +
+	movb	R1, R3		; + movb (R1)+, R3
+	MOV	R3, R0
+	BIC	#177774, R0	; get 2 bits
+	BEQ	25$
+	CMP	R0, #3		; literals length
+	BNE	20$
+	CALL	65$
+20$:	call	GetB12		; +
+	call	PutB12		; + movb (R1)+, (R2)+
+	SOB	R0, 20$
+25$:	MOV	R3, -(SP)
+	ROLB	R3		; get 2 bits
+	ROL	R0
+	ROLB	R3
+	ROL	R0
+	ASL	R0
+	ADD	R0, PC		; run subroutine
+	BR	55$
+	BR	45$
+	BR	50$
+	CALL	60$		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+30$:	MOV	R0, R4		; save offset for future
+35$:	MOV	(SP)+, R0
+	ASR	R0
+	ASR	R0
+	BIC	#177770, R0	; get 3 bits
+	CMP	R0, #7
+	BNE	40$
+	CALL	65$
+	TSTB	R0		; match length
+	BEQ	99$
+40$:	mov	PutA12, R1	; + copy: dst - R4 -> dst, original was:
+	sub	R4, R1		; + mov r2, r3
+	call	GetR12		; + sub r4, r3
+	call	PutB12		; + movb (r3)+,(r2)+
+	inc	R0		; + inc r0
+1$:	mov	PutA12, R1	; + 1$: movb (r3)+,(r2)+
+	sub	R4, R1		; + sob r0, 1$
+	call	GetR12		; +
+	call	PutB12		; +
+	sob	R0, 1$		; +
+	BR	10$
+45$:	CLR	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+	BR	30$
+50$:	CALL	60$ 		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	SWAB	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ADD	#513., R0
+	BR	30$
+55$:	ROLB	R3
+	BCS	35$
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BR	30$
+60$:	COM	R5
+	BMI	2$
+	MOV	R5, R0
+	CLR	R5
+	BR	3$
+2$:	call	GetB12		; +
+	bicb	R1, R5		; + bicb (R1)+, R5
+	MOV	R5, R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+3$:	BIC	#177760, R0	; leave 4 low bits
+	RETURN
+65$:	MOV	R0, -(SP)	; save original value
+	CALL	60$ 		; get nibble in R0
+	BNE	75$
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BNE	70$
+	; unnecessary for short files
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	inc	SP		; skip saved R0
+	inc	SP
+	return
+70$:	ADD	#15., R0
+75$:	DEC	R0
+	ADD	(SP)+, R0	; add original value
+99$:	return
+
+; unpacks background
+DrawBackground:
+	.ppexe	#CmdDrawBack
+	clr	PutA12
+	mov	#CpuBgr, GetA12
+	call	Unpa12
+	return
+

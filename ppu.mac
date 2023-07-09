@@ -1,0 +1,656 @@
+	.title	PPU
+	.enabl	LC,AMA	; local labels, absolute addr mode
+	.list	MEB	; enable macro-extensions binary listing
+	.asect
+	.=0	; from address 0 (!)
+
+; 32-chars symbols length, allow underscore
+; ..\..\macro11\macro11.exe -ysl 32 -yus -m ..\..\macro11\sysmac.sml -l ppu.lst ppu.mac
+
+@include inc_common.mac
+@include inc_ppu_header.mac
+
+; ///////////////////////////////////////////////////////////
+; // PPU INIT
+; ///////////////////////////////////////////////////////////
+
+PPUMain:
+	mov	#1000, SP		; stack is 540..1000
+	mov	#361, @#177054		; set ROM banks as VRAM
+	call	CleaUp			; clear upper RAM	
+	mov	#100000, R0		; clear screen plane 0
+	mov	#177000-100000/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+
+	; wait for CPU asking to start phase 3
+	mov	#PPUState/2, @#177010
+	cmp     #30, @#177014
+	bne	.-14
+
+	clr	@#177026		; allow write to all planes (for font output)
+	bic	#107, @#177066		; turn off interrupt on CPU-PPU channels
+	
+	; timers
+	bic	#^B0000001000000000, @#177054	; disable vsync in PPU
+	bis	#^B0000000100000000, @#177054	; enable vsync in CPU
+	call	PPTINI			; init pp timer
+	bic	#200, @#177716		; turn off sound generator
+
+	; set interrupts
+	mov	#INTKeyboard,  @#300	; keyboard interrupt
+	bis	#100, @#177700		; allow keyboard interrupts	
+
+        ; acknowledge start of phase 3
+	mov	#PPUState/2, @#177010
+	mov	#03, @#177014
+
+	mtps	#0			; allow interrupts
+
+; //////////////////////////////////////////////////////////////////////////////
+; // MAIN PPU CYCLE
+; //////////////////////////////////////////////////////////////////////////////
+
+MainCycle:
+	call	MusPro
+	call	CmdPro
+	br	MainCycle
+
+CmdAdr:	.word	0			; command addr/2 in CPU
+
+; process commands from CPU
+CmdPro:	mov	#CmdBuffer, @#177010
+	tst	@#177014
+	bne	10$
+	inc	WAIPP0			; 'empty' cycles counter
+	return	
+10$:	mov	#CmdBuffer+1, CmdAdr	; start of commands address
+20$:	cmp	CmdAdr, #CmdBuffer	; out of range (overflow)?
+	blos	CmdError
+	mov	#177010, R4
+	mov	#177014, R5
+	; get command
+	mov	CmdAdr, (R4)
+	mov	(R5), R0
+	beq	90$			; end of commands?
+	asl	R0			; set procedure addr
+	mov	CommandsTable(R0), 00$+2
+	; get parameters (R0..R4) and run
+	inc	(R4)
+	mov	(R5), R0
+	inc	(R4)
+	mov	(R5), R1
+	inc	(R4)
+	mov	(R5), R2
+	inc	(R4)
+	mov	(R5), R3
+	inc	(R4)
+	mov	(R5), R5
+	inc	(R4)
+	mov	(R4), CmdAdr
+	mov	R5, R4
+00$:	call	@#000000		; this addr modified earlier
+	br	20$			; next command
+90$:	; end of commands
+	mov	#CmdBuffer, @#177010	; clear 'ready' word in vram
+	clr	@#177014
+	return
+CmdError:				; TODO: error - do something here
+	jmp	Error
+
+; commands table
+CommandsTable:
+	.word	Error			; 00. can't be
+	.word	CleaUp			; 01. cleanup upper RAM
+	.word	PalUpd			; 02. set palette, cursor, resolution, luminance (R0,R1 - palette, R2,R3 - cursor, resolution, lumi)
+	.word	FxWait			; 03. write empty cycles count to CPU
+	.word	ReqRcn			; 04. write empty INTs count to CPU
+	.word	SndStart		; 05. start sound
+	.word	MusStart		; 06. start music
+	.word	SoundOnOff		; 07. sets sound on or off
+	.word	DrawTile		; 08. draw tile
+	.word	DrawPalkaTile		; 09. draw floating palka tile
+	.word	DrawBlackTile		; 10. draw black lines tile
+	.word	DrawBack		; 11. unpack blue background plane-0 to vram
+
+	
+; //////////////////////////////////////////////////////////////////////////////
+; // Procedures
+; //////////////////////////////////////////////////////////////////////////////
+
+; empty interrupt
+RtiAdr:	inc	(PC)+
+RtiCnt:	.word	0
+	rti
+
+; pp timer ready wait
+PptIni:	clr	@#177710
+	tst	@#177714
+	tst	@#177710
+	bne	PPTINI
+	return
+
+; 01: clear upper RAM
+CleaUp:	mov	#END, R0
+	mov	#100000-END/2, R2
+	clr	(R0)+
+	sob	R2, .-2
+	return
+
+; 16: fill screen plane 0 with R0
+FillScreen:
+	mov	#VADDR, R5
+	mov	#SCRWID/2*288., R3
+10$:	mov	R0, (R5)+
+	sob	R3, 10$
+	return
+	
+; clear last 12 lines of screen vmem
+ClrScrBottom:
+	call	SetVreg
+	mov	#177014, R2
+	mov	#SCRWID*288.+VADDR, (R4)
+	mov	#SCRWID*12., R3
+10$:	clr	(R5)
+	clr	(R2)
+	inc	(R4)
+	sob	R3, 10$
+	return
+
+; 03: pallete, resolution, cursor, luminance change
+PalUpd:	mov	#VLinesBegin, R5
+	mov	R0, (R5)+
+	mov	R1, (R5)+
+	cmp	(R5)+, (R5)+
+	mov	R2, (R5)+
+	mov	R3, (R5)
+	return
+
+; 04: write empty cycles count to CPU
+WaiPP0:	.word	0		; PPU wait cycles counter
+FxWait:	mov	#<PpuWaitCount/2>, @#177010
+	mov	WaiPP0, @#177014
+	clr	WaiPP0
+	return
+
+; 05: request RTICNT to CPU
+ReqRcn:	mov	#<PpuRtiCount2/2>, @#177010
+	mov	RTICNT, @#177014
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // UTILS 
+; //////////////////////////////////////////////////////////////////////////////
+
+@include inc_ppu_utils.mac
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // sound and music
+; //////////////////////////////////////////////////////////////////////////////
+
+MusCur:	.word	0 
+SndAdr:	.word	0
+
+; music list addrs
+MusTab:	.word	0, Mus001
+
+; sound list addrs
+SndTab:	.word	0, SND001, SND002, SND003, SND004, SND005, SND006, SND007
+
+.radix 10
+
+; notes (TODO: need correction a bit, some notes are sounding not that right)
+NOTPAD:	.word	1000
+	.word	956, 902, 851, 804, 758, 716, 676, 638, 602, 568, 536, 506
+	.word	478, 451, 426, 402, 379, 358, 338, 319, 301, 284, 268, 253
+	.word	239, 225, 213, 201, 190, 179, 169, 159, 150, 145, 134, 127
+	.word	119, 113, 106, 100, 95,  89,  84,  80,  75,  73,  67,  63
+
+; C             D             E      F             G             A             B
+; C4-37  C#4-38 D4-39  D#4-40 E4-41  F4-42  F#4-43 G4-44  G#4-45 A4-46  A#4-47 B4-48
+; C3-25  C#3-26 D3-27  D#3-28 E3-29  F3-30  F#3-31 G3-32  G#3-33 A3-34  A#3-35 B3-36
+; C2-13  C#2-14 D2-15  D#2-16 E2-17  F2-18  F#2-19 G2-20  G#2-21 A2-22  A#2-23 B2-24
+; C1-01  C#1-02 D1-03  D#1-04 E1-05  F1-06  F#1-07 G1-08  G#1-09 A1-10  A#1-11 B1-12
+
+.radix 8
+
+SndType:	.word	0		; sound type
+SndTCnt:	.word	0		; total cycles count (use additions every cycle)
+SndLCnt:	.word	0		; local cycles count
+SndLDCnt:	.word	0		; local cycles addition
+SndLLo:		.word	0		; low level length (fixed point, high byte used)
+SndLDl:		.word	0		; low level length addition
+SndLHi:		.word	0		; high level length
+SndLDh:		.word	0		; high level length addition
+SndIntLCnt:	.word	0
+
+; R0 <> 0 = No Sound
+; And need to change menu colors: Txt_Menu4 - 15 / 21 pos
+SoundOnOff:
+	movb	R0, NoSound
+	return
+
+
+; start sound, R0 - sound #
+SndStart:
+	mtps	#200			; stop interrupts just in case
+	tstb	NoSound
+	bne	99$
+	call	PPTINI			; init timer (stops previous sounds)
+	clr	MUSCUR			; stop music
+	asl	R0
+	mov	SNDTAB(R0), R0		; sound addr
+	beq	99$			; maybe just exit? (can be used to stop sound)
+	call	SndSetVars
+	cmp	SndType, #SND_PAUSE
+	bne	10$
+	mov	#SndIntPause, @#304	; set sound interrupt to pause
+	mov	#SND_PAUSE_TIMER, @#177712
+	br	30$
+10$:	clr	@#177716		; low signal to speaker
+	mov	#SndIntHi, @#304	; set next sound interrupt to high signal proc
+	mov	SndLLo, @#177712	; low signal duration
+30$:	tst	@#177714
+	tst	@#177714
+	bis	#^B01000101, @#177710	; allow int, start, timer = 8mks
+99$:	mtps	#0
+	return
+
+SndSetVars:
+	mov	(R0)+, SndType		; type of sound effect
+	beq	99$			; none - exit
+	mov	(R0)+, SndTCnt		; total counter
+	cmp	SndType, #SND_PAUSE	; pause type just have counter
+	beq	90$
+	mov	(R0)+, SndLCnt		; local counter
+	mov	(R0)+, SndLDCnt		; local counter addition
+	mov	(R0)+, SndLLo		; low level duration
+	mov	(R0)+, SndLDl		; low level duration addition
+	mov	(R0)+, SndLHi		; high level duration
+	mov	(R0)+, SndLDh		; high level duration addition
+90$:	mov	R0, SNDADR		; store next effect addr
+	mov	SndLCnt, SndIntLCnt	; set local counter to interrupt procedure		
+99$:	return	
+
+
+; PP timer interrupt for pause
+SndIntPause:
+	dec	SndTCnt
+	bne	90$
+	mov	R0, -(SP)
+	mov	SNDADR, R0
+	call	SndSetVars
+	mov	(SP)+, R0
+	tst	SndType
+	bne	10$
+	; no next effect - stop timer
+	clr	@#177710
+	br	99$
+10$:	; normal tone
+	; clr	@#177716		; do we need to set it here? must already be at low
+	mov	#SndIntHi, @#304	; set interrupt to high tick
+	mov	SndLLo, @#177712
+	br	99$
+	; still pause
+90$:	mov	#SND_PAUSE_TIMER, @#177712	; set default pause timer
+99$:	tst	@#177714
+	tst	@#177714
+	rti
+
+
+; PP timer interrupts for sounds
+SndIntLo:
+	clr	@#177716		; set low signal
+	mov	#SndIntHi, @#304	; set next interrupt to high-level version
+	; cycle without changes to low|high durations
+	decb	SndIntLCnt+1		; (!) only h-byte is used
+	bne	90$
+	; change durations of low|high|local count
+	add	SndLDl, SndLLo		; additions to low|high durations
+	add	SndLDh, SndLHi		;
+	add	SndLDCnt, SndLCnt	; addition to local cycles count
+	mov	SndLCnt, SndIntLCnt	; restore local cycles count
+	; end of effect?
+	dec	SndTCnt
+	bne	90$
+	; try next effect
+	mov	R0, -(SP)
+	mov	SNDADR, R0
+	call	SndSetVars
+	mov	(SP)+, R0
+	tst	SndType
+	bne	10$
+	; no next effect - stop timer
+	clr	@#177710
+	br	99$
+10$:	cmp	SndType, #SND_PAUSE	; is it pause?
+	bne	90$
+	mov	#SndIntPause, @#304	; set sound interrupt to pause
+	mov	#SND_PAUSE_TIMER, @#177712
+	br	99$
+90$:	mov	SndLLo, @#177712
+99$:	tst	@#177714
+	tst	@#177714
+	rti
+
+SndIntHi:
+	mov	#200, @#177716		; set high level
+	mov	#SndIntLo, @#304	; next tick will be low
+	mov	SndLHi, @#177712
+	tst	@#177714
+	tst	@#177714
+	rti
+
+
+; start music, R0 - music #
+MusStart:
+	mtps	#200			; stop interrupts
+	tstb	NoSound
+	bne	99$
+	call	PPTINI			; init pp timer
+	tst	R0			; 0 - stop music
+	bne	10$
+	clr	MUSCUR
+	mtps	#0
+	return
+10$:	asl	R0
+	mov	MUSTAB(R0), R0		; addr from music table
+	movb	(R0), R1		; first note #
+	asl	R1
+	mov	NOTPAD(R1), @#177712	; initial counter
+	mov	R0, MUSCUR		; first note addr
+	tst	@#177714
+	tst	@#177714
+	mov	#MusIntLo, @#304	; set music interrupt
+	bis	#^B01000011, @#177710	; allow int, start, timer = 4mks
+99$:	mtps	#0
+	return
+
+; mus processor
+MusPro:	tst	MUSCUR			; current note addr
+	bne	1$			; are we are playing?
+	return				; no - return
+1$:	mov	#<VSyncCount2/2>, @#177010
+	cmp	@#177014, #1		; was #2 vsync?
+	bhi	2$
+	return
+2$:	mov	#<VSyncCount2/2>, @#177010
+	clr	@#177014
+	; process new note
+	mtps	#200			; stop interrupts
+	inc	MUSCUR			; advance music note
+	movb	@MUSCUR, R1		; note #
+	beq	20$			; empty ID - stop playing
+	bmi	10$			; empty note
+	asl	R1
+	mov	NOTPAD(R1), R1		; note delays initial
+	mov	R1, MusCountHi+2
+	mov	R1, MusCountLo+2
+	mov	#200, MusIntHi+2	; set #200 in high in case we cleared it
+	mov	R1, @#177712		; set music interrupt timer
+	tst	@#177714		; maybe better way here is  
+	tst	@#177714		; TST @#177714, BNE .-4
+	br	99$
+10$:	; stop ticking beeper
+	clr	MusIntHi+2		; clear #200 - so it will not tick high
+	br	99$
+20$:	; stop playing
+	call	PPTINI			; init PP timer
+	clr	MUSCUR			; music is stopped
+99$:	mtps	#0
+	return
+
+; timer interrupts (for tones)
+MusIntLo:
+	clr	@#177716		; tick low level
+	mov	#MusIntHi, @#304	; set next interrupt to high-level version
+MusCountLo:
+	mov	#000000, @#177712	; set new timer as duty changed
+	add	#2, MusCountLo+2	; change duty
+	tst	@#177714		; TWO (!) times is important I think
+	tst	@#177714
+	rti
+; same as above just for high signal level
+MusIntHi:
+	mov	#200, @#177716		; (!) self-modifying 
+	mov	#MusIntLo, @#304
+MusCountHi:
+	mov	#000000, @#177712
+	sub	#2, MusCountHi+2	; do we need to test it for close to 0?
+	tst	@#177714
+	tst	@#177714
+	rti		
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // KEYBOARD
+; //////////////////////////////////////////////////////////////////////////////
+
+; keyboard interrupt
+INTKeyboard:
+	mov	R0, -(SP)
+	mov	@#177702, R0		; (!) read this register ONLY ONCE
+	mov	R1, -(SP)
+	mov	R2, -(SP)
+	mov	R3, -(SP)
+	mov	R4, -(SP)
+	mov	R5, -(SP)
+	mov	#177010, R4
+	mov	#177014, R5
+	mov	(R4), -(SP)		; save vaddr register 
+	; now R0-keycode, (R4)-vaddr, (R5)-vdata
+	mov	#KeyCurrent/2, (R4)
+	mov	R0, (R5)
+	bit	#^B10000000, R0		; key was released?
+	bne	50$
+	; 0 2 4 6 8 10 == dn,dn,up,up,dn,up ? -> combo is pressed
+	; put pressed keys to buffer
+	mov	#KeysBuffer, R1
+	mov	#KeysBuffer+1, R2
+	movb	(R2)+, (R1)+
+	movb	(R2)+, (R1)+
+	movb	(R2)+, (R1)+
+	movb	(R2)+, (R1)+
+	movb	(R2)+, (R1)+
+	movb	R0, (R1)+
+	; check for key buffer combo ^_^
+	mov	#6., R3
+2$:	cmpb	(R2)+, -(R1)
+	bne	4$
+	sob	R3, 2$	
+	mov	#KeyCombo/2, (R4)	; set 'combo is pressed'
+	inc	(R5)
+4$:	; -----------------
+	; == key pressed ==
+	mov	#KeyAny/2, (R4)		; 'anykey' is also pressed
+	inc	(R5)
+	mov	#KEYSDN, R1
+10$:	tst	(R1)
+	beq	90$
+	cmp	R0, (R1)+
+	beq	20$
+	add	#4, R1
+	br	10$
+20$:	; got our key
+	mov	(R1)+, (R4)		; set CPU addr
+	inc	(R5)			; must be mov #1,(R5) but its ok with inc
+	mov	(R1)+, R2
+	beq	10$	
+	mov	R2, (R4)
+	clr	(R5)
+	br	10$
+50$:	; == key released - R0 = ^B1000xxxx
+	bic	#^B1111111111110000, R0
+	asl	R0
+	mov	KEYSUP+2(R0), R1	; finish addr
+	mov	KEYSUP(R0), R0		; start addr
+60$:	cmp	R0, R1			; finished?
+	bhis	90$
+	mov	(R0)+, (R4)		; set CPU addr
+	clr	(R5)			; and clear key
+	br	60$
+	;
+90$:	mov	(SP)+, (R4)
+	mov	(SP)+, R5
+	mov	(SP)+, R4
+	mov	(SP)+, R3
+	mov	(SP)+, R2
+	mov	(SP)+, R1
+	mov	(SP)+, R0
+	rti
+
+; keys release - clear addrs
+KEYSUP:	.word	KUP0000, KUP0001, KUP0010, KUP0011, KUP0100, KUP0101, KUP0110, KUP0111
+	.word	KUP1000, KUP1001, KUP1010, KUP1011, KUP1100, KUP1101, KUP1110, KUP1111
+	.word	KUP7777
+KUP0000:
+KUP0001:
+KUP0010:
+KUP0011:
+KUP0100:	.word	KeyStop/2
+KUP0101:	.word	KeyShift/2
+KUP0110:
+KUP0111:
+KUP1000:	.word	Key1/2, KeyK1/2
+KUP1001:	.word	Key2/2, KeyK2/2
+KUP1010:	.word	Key3/2, KeyUst/2
+KUP1011:	.word	Key4/2, KeySpace/2, KeyRight/2
+KUP1100:	.word	Key5/2, KeyDown/2, KeyUp/2
+KUP1101:	.word	Key6/2
+KUP1110:	.word	Key7/2, KeyLeft/2
+KUP1111:	.word	Key8/2
+KUP7777:
+
+; keys press - set 1st addr, clear second
+KEYSDN:	.word	^B00000100, KeyStop/2,		0
+	.word	^B01101010, KeyUst/2,		0
+	.word	^B00011000, Key1/2,		0
+	.word	^B00011001, Key2/2,		0
+	.word	^B00011010, Key3/2,		0
+	.word	^B00001011, Key4/2,		0
+	.word	^B00011100, Key5/2,		0
+	.word	^B00011101, Key6/2,		0
+	.word	^B00001110, Key7/2,		0
+	.word	^B00001111, Key8/2,		0
+	.word	^B01001011, KeySpace/2,		0
+	.word	^B01011100, KeyDown/2,		KeyUp/2
+	.word	^B01101100, KeyUp/2,		KeyDown/2
+	.word	^B01001110, KeyLeft/2, 		KeyRight/2
+	.word	^B01011011, KeyRight/2,		KeyLeft/2
+	.word	^B00001000, KeyK1/2,		0
+	.word	^B00001001, KeyK2/2,		0
+	.word	^B01000101, KeyShift/2,		0
+	.word	0
+	
+KeysBuffer:	.BLKB	6				; last 6 keys
+		.BYTE	154, 134, 154, 154, 134, 134	; dn,dn,up,up,dn,up written backwards
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU ERROR - TODO ?? DEBUG INFO ??
+; //////////////////////////////////////////////////////////////////////////////
+
+Error:	mtps	#200			; stop interrupts? do we need it?
+	br	.
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU DATA SECTION //////////////////////////////////////////////////////////
+; //////////////////////////////////////////////////////////////////////////////
+
+; // SOUND & MUSIC /////////////////////////////////////////////////////////////
+
+.radix 10
+
+NoSound:	.byte	0
+
+; C             D             E      F             G             A             B
+; C4-37 C#4-38  D4-39 D#4-40  E4-41  F4-42 F#4-43  G4-44 G#4-45  A4-46 A#4-47  B4-48
+; C3-25 C#3-26  D3-27 D#3-28  E3-29  F3-30 F#3-31  G3-32 G#3-33  A3-34 A#3-35  B3-36
+; C2-13 C#2-14  D2-15 D#2-16  E2-17  F2-18 F#2-19  G2-20 G#2-21  A2-22 A#2-23  B2-24
+; C1-01 C#1-02  D1-03 D#1-04  E1-05  F1-06 F#1-07  G1-08 G#1-09  A1-10 A#1-11  B1-12
+
+; music #1
+MUS001:
+	.byte	13, 16, 20
+	.byte	13, 16
+	.byte	-1
+
+	.byte	13, 16, 20
+	.byte	13, 16
+	.byte	-1
+
+	.byte	13, 16, 20
+	.byte	13, 16
+	.byte	-1
+
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+
+	.byte	0
+	.even
+
+SND_TONE = 1
+SND_PAUSE = 2
+
+SND_PAUSE_TIMER	= 50*256
+
+; TYPE: SND_TONE
+; ARGS: TCNT  = total repeats count (use additions every cycle)
+;       LCNT  = local repeats count (only h-byte is used, 127 max)
+;	LDCNT = local repeats addition 
+;       Lo = low signal [______/'''''''] length
+;       Dl = addition to Lo
+;	Hi = high signal length
+;       Dh = addition to Hi
+; london bridge is falling down..
+SND001:	.word	SND_TONE, 16, 01*256, 0,	125, 5,  125, 5
+	.word	0
+; spadeing
+SND002:	.word	SND_TONE, 05, 01*256, 0,	10, 1, 100, -15
+	.word	0
+; add item
+SND003:	.word	SND_TONE, 01, 01*256, 0,	125, 1, 125, 1
+	.word	0
+; eat item
+SND004:	.word	SND_TONE, 06, 10*256, -1*256,	50, 10, 30, 20
+	.word	SND_TONE, 04, 2*256, 2*256,	120, -10, 120, -20
+	.word	0
+; remove item
+SND005:	.word	SND_TONE, 04, 8*256, 2*256,	124, -20, 114, -18
+	.word	0
+; message box
+SND006:	.word	SND_TONE, 1, 10*256, 0,		60, 0, 60, 0
+	.word	SND_PAUSE, 10
+	.word	SND_TONE, 1, 16*256, 0,		60, 0, 60, 0
+	.word	0
+; test
+SND007:	.word	SND_TONE, 1, 6*256,  0, 	156, 0, 156, 0
+	.word	SND_TONE, 1, 9*256,  0,		104, 0, 104, 0
+	.word	SND_TONE, 1, 12*256, 0,		78,  0, 78,  0
+	.word	SND_TONE, 1, 6*256,  0,		62,  0, 250, 0
+	.word	SND_TONE, 1, 9*256,  0,		28,  0, 180, 0
+	.word	SND_TONE, 1, 12*256, 0,		26,  0, 130, 0
+	.word	0
+
+.radix 8
+
+; 8mks for one period = 16mks for two = 1 / 0.000016 = 62500Hz
+; TONE: 1, 2000, 400, 0, 128, 0 - Frames, Frame Len, Pitch, Pitch slide, Duty, Duty slide
+; My Pitch = 62500 / Pitch
+
+; // SPRITES ////////////////////////////////////////////////////////////////////
+
+@include inc_ppu_sprites.mac
+@include inc_ppu_bgr.mac
+
+END:
+; RAM will be cleared after this

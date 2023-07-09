@@ -1,0 +1,806 @@
+	.title	CPU
+	.enabl	LC, AMA
+	.list	MEB
+	.asect
+	.=1000
+
+@include inc_common.mac
+
+START:	nop
+	mtps	#200
+	mov	#1000, SP
+
+	; launch code in PPU
+	call	StartPPU
+
+	; clear upper CPU RAM
+	mov	#PPUStart, R0
+	mov	#160000-PPUStart/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+
+	; prepare interrupt vectors
+	clr	R0
+	mov	#207, (R0)+		; addr 000000
+	clr	(R0)+			; addr 000002
+	mov	#117, R3		; addrs 000004 .. 000500
+10$:	mov	#RtiAdr, (R0)+
+	mov	#200, (R0)+
+	sob	R3, 10$
+	; clear stack data
+	mov	#1000-500/2, R3		; addrs 000500 .. 001000
+	clr	(R0)+
+	sob	R3, .-2
+
+	; ask for 'ppu phase 3'
+	mov	#30, PPUState
+        ; wait for ackn of phase 3
+	cmp	#03, PPUState
+	bne	.-6
+
+	; clear screen planes 1,2
+	call	SetVreg
+	mov	#100000, (R4)
+	mov	#40000, R3
+	clr	(R5)
+	inc	(R4)
+	sob	R3, .-4
+
+	; vsync interrupt
+	mov	#VSync, @#100
+
+	; now all is set, allow interrupts
+	mtps	#0
+	clr	CurrentMode
+
+	; Background
+	call	DrawBackground
+
+; well, now let's play a game
+MainCycle:
+	call	VSyncWait		; vsync wait cycle
+	call	CheckStop		; STOP key - reset game
+	call	CheckColors		; K1 key - RGB/GRB
+	call	CheckTilesAddition	; K2 key - switch tiles
+	; key UST - pause
+	tst	KeyUst
+	beq	10$
+	clr	KeyUst
+	com	Pause
+10$:	tst	Pause
+	bne	MainCycle
+	; run procedures
+	mov	CurrentMode, R0
+	asl	R0
+	call	@MainCycleTable(R0)
+	; debug output
+	call	DebugInfo	
+	jmp	MainCycle
+
+MainCycleTable:	
+	.word	MainReset		; 00 - reset
+	.word	MainPalkaNew		; 01
+	.word	MainPalkaFall		; 02
+	.word	MainPalkaFix		; 03
+	.word	MainDropDown		; 04
+	.word	MainCheckRemove		; 05
+	.word	MainCheckOver		; 06
+	.word	MainDrawRemove		; 07
+
+
+; 00 - reset anything to a new
+MainReset:
+	; wait for keypress
+	clr	KeySpace
+10$:	tst	KeySpace
+	beq	10$
+	; reset vars
+	mov	#1., Level
+	clr	Score
+	; clear keys states
+	mov	#Key8, R0
+20$:	clr	(R0)+
+	cmp	R0, #KeyCurrent
+	blos	20$
+	; rand palka next
+	call	Random5
+	movb	R1, @#PalkaNext
+	call	Random5
+	movb	R1, @#PalkaNext+1
+	call	Random5
+	movb	R1, @#PalkaNext+2
+	; clear stakan's
+	mov	#Stakan, R0
+	mov	#Stakan2, R2
+	mov	#StakanEnd-Stakan/2, R3
+	clr	(R0)+
+	clr	(R2)+
+	sob	R3, .-4
+	call	RedrawStakan
+	; DEBUG
+	; copy test stakan onto stakan
+;	mov	#StakanTest, R0
+;	mov	#Stakan, R1
+;	mov	#Stakan2, R2
+;	mov	#StakanEnd-Stakan/2, R3
+;10$:	mov	(R0)+, (R1)+
+;	clr	(R2)+
+;	sob	R3, 10$
+	; DEBUG
+	inc	CurrentMode
+	return
+
+; 01 - start new palka
+MainPalkaNew:
+	; next -> palka
+	movb	@#PalkaNext, @#Palka
+	movb	@#PalkaNext+1, @#Palka+1
+	movb	@#PalkaNext+2, @#Palka+2
+	; rand palka next
+	call	Random5
+	movb	R1, @#PalkaNext
+	call	Random5
+	movb	R1, @#PalkaNext+1
+	call	Random5
+	movb	R1, @#PalkaNext+2
+	; draw next
+	call	DrawNext
+	; set coords
+	mov	#2., PalkaX
+	mov	#-32., R0
+	mov	R0, PalkaY
+	asl	R0
+	asl	R0
+	mov	R0, PalkaY4
+	mov	PalkaX, PalkaPrevX
+	mov	PalkaY, PalkaPrevY
+	clr	PalkaStopped
+	mov	Level, PalkaSpeed
+	inc	CurrentMode
+	return
+
+; 02 - palka is falling down
+MainPalkaFall:
+	call	DrawPalka
+	; test for clearing prev
+	cmp	PalkaX, PalkaPrevX
+	beq	10$
+	mov	#48., PalkaDY
+	br	20$
+10$:	mov	PalkaY, PalkaDY
+	sub	PalkaPrevY, PalkaDY
+20$:	call	DrawBlackTile
+	cmp	PalkaY4, PalkaPrevY4	; did we moved it down?
+	bne	22$
+	inc	PalkaStopped		; increase 'stopped' counter
+	cmp	PalkaStopped, #32.
+	blt	22$
+	inc	CurrentMode
+	return
+22$:	mov	PalkaX, PalkaPrevX
+	mov	PalkaY, PalkaPrevY
+	mov	PalkaY4, PalkaPrevY4
+	; down movement
+	mov	PalkaSpeed, TempR0
+24$:	call	CanGoDown
+	bcc	30$
+	inc	PalkaY4
+	mov	PalkaY4, R0
+	asr	R0
+	asr	R0
+	mov	R0, PalkaY
+	dec	TempR0
+	bgt	24$
+	mov	PalkaY4, R0
+	asr	R0
+	asr	R0
+	mov	R0, PalkaY
+	; check keys
+30$:	tst	KeyLeft
+	beq	40$
+	clr	KeyLeft
+	call	CanGoLeft
+	bcc	40$
+	dec	PalkaX
+	br	50$
+40$:	tst	KeyRight
+	beq	50$
+	clr	KeyRight
+	call	CanGoRight
+	bcc	50$
+	inc	PalkaX
+50$:	; check rotate
+	tst	KeyUp
+	beq	60$
+	clr	KeyUp
+	mov	#3, R0
+	.ppexe	#CmdSoundPlay
+	movb	@#Palka, @#Palka+3
+	movb	@#Palka+1, @#Palka
+	movb	@#Palka+2, @#Palka+1
+	movb	@#Palka+3, @#Palka+2
+60$:	; check speed up
+	tst	KeyDown
+	beq	70$
+	clr	KeyDown
+	mov	#1., R0
+	.ppexe	#CmdSoundPlay
+	mov	#8.*4., PalkaSpeed
+70$:
+	return
+
+; 03 - fixing palka figures in stakan
+MainPalkaFix:
+	mov	PalkaY, R2
+	; skip unlaceable
+	mov	#Palka, R4
+	mov	#3., R3
+10$:	tst	R2
+	bge	20$
+	add	#16., R2
+	inc	R4
+	dec	R3
+	beq	99$
+	br	10$
+20$:	; place placeable
+	mov	PalkaX, R0		; get addr in stakan
+	asr	R2
+	bic	#^B111, R2		; /16.*8.
+	add	R2, R0
+	add	#Stakan, R0
+30$:	movb	(R4)+, (R0)
+	add	#8., R0
+	sob	R3, 30$
+99$:	; switch to 'check remove' mode
+	clr	ScoreMul
+	mov	#5., CurrentMode
+	return
+
+; 04 - figures are dropping down
+MainDropDown:
+	bit	#^B11, FrameCount	; every 4th frame
+	bne	99$
+	call	RedrawStakan
+	call	DropStakan
+	tst	FigMoved
+	bne	99$
+	inc	CurrentMode
+99$:	return
+
+; 05 - check removal
+MainCheckRemove:
+	call	RedrawStakan
+	call	CheckRemove
+	tst	FigRemoved		; did we removed something?
+	bne	10$
+	mov	#6., CurrentMode	; switch to 'check for game over'
+	return
+10$:	; add score
+	call	GetScore
+	inc	ScoreMul
+	mov	ScoreMul, R3
+20$:	add	R0, Score
+	sob	R3, 20$
+	clr	DrawRemoveCnt		; clear animation counter
+	mov	#7., CurrentMode	; switch to 'draw removing animations'
+	return
+
+; 06 - check for game over
+MainCheckOver:
+	tstb	@#Stakan+2
+	bne	10$
+	mov	#1., CurrentMode	; switch to 'new palka' mode
+	return
+10$:	; music 'ta da da da'
+	mov	#1., R0
+	.ppexe	#CmdMusicPlay
+	; draw 'game over'
+	; clear upper line
+	mov	#STAKAN_START_X, TempR1
+	mov	#5.*16.+STAKAN_START_Y, TempR2
+	mov	#6., TempR3
+20$:	mov	TempR1, R1
+	mov	TempR2, R2
+	clr	R0
+	.ppexe	#CmdDrawTile
+	call	DrawTile
+	add	#2., TempR1
+	dec	TempR3
+	bne	20$
+	; draw game over line
+	mov	#STAKAN_START_X, R1
+	mov	#6.*16.+STAKAN_START_Y, R2
+	clr	R0
+	.ppexe	#CmdDrawTile
+	call	DrawTile
+	mov	#STAKAN_START_X+2., R1
+	mov	#6.*16.+STAKAN_START_Y, R2
+	mov	#26., R0
+	.ppexe	#CmdDrawTile
+	call	DrawTile
+	mov	#STAKAN_START_X+4., R1
+	mov	#6.*16.+STAKAN_START_Y, R2
+	mov	#27., R0
+	.ppexe	#CmdDrawTile
+	call	DrawTile
+	mov	#STAKAN_START_X+6., R1
+	mov	#6.*16.+STAKAN_START_Y, R2
+	mov	#28., R0
+	.ppexe	#CmdDrawTile
+	call	DrawTile
+	mov	#STAKAN_START_X+8., R1
+	mov	#6.*16.+STAKAN_START_Y, R2
+	mov	#29., R0
+	.ppexe	#CmdDrawTile
+	call	DrawTile
+	mov	#STAKAN_START_X+10., R1
+	mov	#6.*16.+STAKAN_START_Y, R2
+	clr	R0
+	.ppexe	#CmdDrawTile
+	call	DrawTile
+	; clear bottom line
+	mov	#STAKAN_START_X, TempR1
+	mov	#7.*16.+STAKAN_START_Y, TempR2
+	mov	#6., TempR3
+30$:	mov	TempR1, R1
+	mov	TempR2, R2
+	clr	R0
+	.ppexe	#CmdDrawTile
+	call	DrawTile
+	add	#2., TempR1
+	dec	TempR3
+	bne	30$
+	; hiscore
+	cmp	Score, Hiscore
+	ble	40$
+	mov	Score, Hiscore
+40$:	clr	CurrentMode		; reset game
+	return
+
+; 07 - remove figures
+MainDrawRemove:
+	bit	#^B111, FrameCount	; every 8th frame
+	bne	99$
+	tst	DrawRemoveCnt
+	bne	2$
+	mov	#2, R0			; play 'removing' sound
+	.ppexe	#CmdSoundPlay
+2$:	call	RedrawStakan
+	mov	#Stakan, R0
+	mov	#Stakan2, R1
+	mov	#StakanEnd2-Stakan2, R3
+10$:	tstb	(R1)
+	beq	20$
+	incb	(R1)
+	clrb	(R0)
+20$:	inc	R0
+	inc	R1
+	sob	R3, 10$
+	inc	DrawRemoveCnt
+	cmp	DrawRemoveCnt, #2.
+	blt	99$
+	; clear remove animation
+	mov	#Stakan2, R1
+	mov	#StakanEnd2-Stakan2/2, R3
+	clr	(R1)+
+	sob	R3, .-2
+	mov	#4., CurrentMode	; switch to 'drop down again'
+99$:	return
+
+
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Logic
+; //////////////////////////////////////////////////////////////////////////////
+
+; drop figures in stakan by 1
+DropStakan:
+	clr	R2			; 'moved something' counter
+	mov	#StakanEnd, R0
+	mov	#StakanEnd-Stakan-8., R3
+10$:	tstb	-(R0)			; this place is empty?
+	bne	80$			; nope - continue
+	movb	-8.(R0), R1		; get upper figure
+	beq	80$			; if empty - continue
+	movb	R1, (R0)		; if not - copy it down
+	clrb	-8.(R0)
+	inc	R2			; yes, we moved something
+80$:	sob	R3, 10$
+	mov	R2, FigMoved		; update 'moved' flag
+	return
+
+; check and mark for remove
+CheckRemove:
+	clr	FigRemoved		; mark as 'nothing to remove'
+	mov	#Stakan2, R0		; clear removal animations
+	mov	#StakanEnd2-Stakan2/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+	call	CheckRemUp
+	call	CheckRemRight
+	call	CheckRemRightUp
+	call	CheckRemRightDown
+	return	
+
+; checking upwards
+CheckRemUp:
+	mov	#StakanEnd-2, R0
+	mov	#StakanEnd2-2, R2	; stakan2 with 'removing' animations number
+	mov	#11., R3
+10$:	mov	#6., R4
+20$:	dec	R2
+	movb	-(R0), R1
+	beq	80$
+	cmpb	R1, -8.(R0)
+	bne	80$
+	cmpb	R1, -16.(R0)
+	bne	80$
+	movb	#1, (R2)		; set marks in stakan removing data
+	movb	#1, -8.(R2)
+	movb	#1, -16.(R2)
+	inc	FigRemoved
+80$:	sob	R4, 20$
+	sub	#2, R0
+	sub	#2, R2
+	sob	R3, 10$
+	return
+
+; checking right
+CheckRemRight:
+	mov	#Stakan, R0
+	mov	#Stakan2, R2
+	mov	#13., R3
+10$:	mov	#4., R4
+20$:	movb	(R0), R1
+	beq	80$
+	cmpb	R1, 1(R0)
+	bne	80$
+	cmpb	R1, 2(R0)
+	bne	80$
+	movb	#1, (R2)		; set marks in stakan removing data
+	movb	#1, 1(R2)
+	movb	#1, 2(R2)
+	inc	FigRemoved
+80$:	inc	R0
+	inc	R2
+	sob	R4, 20$
+	add	#4., R0
+	add	#4., R2
+	sob	R3, 10$
+	return
+
+; checking right up
+CheckRemRightUp:
+	mov	#16.+Stakan, R0
+	mov	#16.+Stakan2, R2
+	mov	#11., R3
+10$:	mov	#4., R4
+20$:	movb	(R0), R1
+	beq	80$
+	cmpb	R1, 1-8.(R0)
+	bne	80$
+	cmpb	R1, 2-16.(R0)
+	bne	80$
+	movb	#1, (R2)		; set marks in stakan removing data
+	movb	#1, 1-8.(R2)
+	movb	#1, 2-16.(R2)
+	inc	FigRemoved
+80$:	inc	R0
+	inc	R2
+	sob	R4, 20$
+	add	#4., R0
+	add	#4., R2
+	sob	R3, 10$
+	return
+
+; checking right down
+CheckRemRightDown:
+	mov	#Stakan, R0
+	mov	#Stakan2, R2
+	mov	#11., R3
+10$:	mov	#4., R4
+20$:	movb	(R0), R1
+	beq	80$
+	cmpb	R1, 1+8.(R0)
+	bne	80$
+	cmpb	R1, 2+16.(R0)
+	bne	80$
+	movb	#1, (R2)		; set marks in stakan removing data
+	movb	#1, 1+8.(R2)
+	movb	#1, 2+16.(R2)
+	inc	FigRemoved
+80$:	inc	R0
+	inc	R2
+	sob	R4, 20$
+	add	#4., R0
+	add	#4., R2
+	sob	R3, 10$
+	return
+
+
+; key STOP - restart all
+CheckStop:
+	tst	KeyStop
+	beq	99$
+	clr	KeyStop			; release STOP
+	clr	Pause			; unpause
+	clr	CurrentMode		; reset mode
+99$:	return
+
+; debug info
+DebugInfo:
+	tst	DebugMode
+	bne	.+4
+	return
+	bit	#^B1111, FrameCount	; once in 16 frames
+	beq	.+4
+	return
+	mov	#8.*SCRWID+1+VADDR, R1
+	mov	KeyCurrent, R0		; pressed/released key
+	call	PrintBinaryWord
+	mov	#8.*SCRWID+10.+VADDR, R1
+	mov	CpuWaitCount, R0	; remaining wait cycles 
+	call	PrintOctalWord
+	mov	#8.*SCRWID+14.+VADDR, R1
+	mov	PpuWaitCount, R0	; remaining PPU wait cycles 
+	call	PrintOctalWord
+	return
+
+; key K1 - RGB / GRB switch
+CheckColors:	
+	tst	KeyK1
+	bne	10$
+	return
+10$:	clr	KeyK1
+	com	RgbMode	
+	bne	20$
+	mov	#^B1101110010011000, R0 ; swap R&G bits
+	mov	#^B1111111010111010, R1
+	mov	#^B0000000000010000, R2
+	mov	#^B0000000000010111, R3
+	br	30$
+20$:	mov	#^B1011101010011000, R0	; YRGB for 011 010 001 000
+	mov	#^B1111111011011100, R1	; YRGB for 111 110 101 100
+	mov	#^B0000000000010000, R2 ; no cursor
+	mov	#^B0000000000010111, R3 ; 320x288, max luminance
+30$:	.ppexe	#CmdUpdPalette		; update palette & resolution
+	return
+
+; key K2 - Tiles addition switch
+CheckTilesAddition:
+	tst	KeyK2
+	bne	10$
+	return
+10$:	clr	KeyK2
+	tst	TilesAddition
+	beq	20$
+	clr	TilesAddition
+	br	90$
+20$:	mov	#6., TilesAddition
+90$:	call	RedrawStakan
+	call	DrawNext
+	return
+
+; can palka go down?
+CanGoDown:
+	; check max Y
+	mov	PalkaY, R2
+	add	#48., R2
+	cmp	R2, #208.
+	bge	90$
+	; check stakan empty
+	asr	R2
+	bic	#^B111, R2		; palka Y to stakan line addr
+	add	PalkaX, R2
+	tstb	Stakan(R2)
+	bne	90$
+	sec
+	return
+90$:	clc
+	return
+
+; can palka go left?
+CanGoLeft:
+	; check min X
+	mov	PalkaX, R1
+	beq	90$
+	; check stakan
+	mov	PalkaY, R2
+	add	#47., R2
+	asr	R2
+	bic	#^B111, R2		; palka Y to stakan line addr
+	add	R1, R2
+	dec	R2
+	tstb	Stakan(R2)
+	bne	90$
+	sec
+	return
+90$:	clc
+	return
+
+; can palka go right?
+CanGoRight:
+	; check max X
+	mov	PalkaX, R1
+	cmp	R1, #5.
+	bge	90$
+	; check stakan
+	mov	PalkaY, R2
+	add	#47., R2
+	asr	R2
+	bic	#^B111, R2		; palka Y to stakan line addr
+	add	R1, R2
+	inc	R2
+	tstb	Stakan(R2)
+	bne	90$
+	sec
+	return
+90$:	clc
+	return
+
+; get 'removed' score
+GetScore:
+	clr	R0
+	mov	#Stakan2, R1
+	mov	#StakanEnd2-Stakan2, R3
+10$:	tstb	(R1)+
+	beq	20$
+	inc	R0
+20$:	sob	R3, 10$
+	return
+
+; //////////////////////////////////////////////////////////////////////////////
+; // UTILS 
+; //////////////////////////////////////////////////////////////////////////////
+
+@include inc_cpu_utils.mac
+
+; 'empty' interrupt
+RtiAdr:	inc	(PC)+
+RtiCnt:	.word	0
+	rti
+
+; vsyinc interrupt
+VSync:	inc	VSyncCount1		; this one is used in CPU
+	inc	VSyncCount2		; this one is used in PPU for music
+	rti
+
+VSyncWait:
+	clr	R0
+VSyncWait1:
+	inc	R0			; empty cycles counter
+	cmp	VSyncCount1, (PC)+	; check for n-th vsync
+VSyncX:	.word	1			; 1 = 50Hz, 2 = 25Hz .. etc
+	blo	VSyncWait1
+	clr	VSyncCount1
+	mov	R0, CpuWaitCount
+	.ppexe	#CmdFixWait		; get PPU empty (wait) cycles
+	inc	FrameCount
+	return
+
+; random with linear-feedback shift register (Galois)
+; random -> R0
+Random:	clc
+	ror	(PC)+
+Lfsr00:	.word	126341 		; 0ACE1
+	bcc	Lfsr03
+	mov	(PC)+, R0
+Lfsr01:	.word	132000		; 0B400
+	xor	R0, Lfsr00
+Lfsr03:	mov	Lfsr00, R0
+	return
+
+; random 1..5 -> R1
+Random5:
+	call	Random
+	clr	R1
+10$:	inc	R1
+	sub	#177777/5., R0
+	bcc	10$
+	return
+
+; //////////////////////////////////////////////////////////////////////////////
+; // DATA
+; //////////////////////////////////////////////////////////////////////////////
+
+Level:		.word	0
+Score:		.word	0
+ScoreMul:	.word	0		; score multiply 
+Hiscore:	.word	0
+
+CurrentMode:	.word	0
+DebugMode:	.word	177777
+RgbMode:	.word	0
+CpuWaitCount:	.word	0
+FrameCount:	.word	0
+Pause:		.word	0
+TilesAddition:	.word	0
+
+FigMoved:	.word	0		; did we moved figures?
+FigRemoved:	.word	0
+DrawRemoveCnt:	.word	0
+
+Palka:		.byte	1,2,3,0
+PalkaNext:	.byte	3,2,1,0
+
+PalkaX:		.word	0
+PalkaY:		.word	0
+PalkaY4:	.word	0
+PalkaPrevX:	.word	0
+PalkaPrevY:	.word	0
+PalkaPrevY4:	.word	0
+PalkaDY:	.word	0
+PalkaSpeed:	.word	0
+PalkaStopped:	.word	0
+
+; temp vars
+VarAddr:	.word	0
+VarAddr2:	.word	0
+VarX:		.word	0
+VarY:		.word	0
+TempR0:		.word	0
+TempR1:		.word	0
+TempR2:		.word	0
+TempR3:		.word	0
+TempR4:		.word	0
+TempR5:		.word	0
+
+; Actual stakan is 6 x 13, added some bytes for simplier code
+StakanTest:
+	.byte	2, 3, 0, 2, 1, 0, 0, 0
+	.byte	3, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 5, 3, 2, 0, 3, 0, 0
+	.byte	4, 1, 2, 2, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 1, 1, 0, 0, 3, 0, 0
+	.byte	0, 0, 0, 2, 0, 3, 0, 0
+	.byte	2, 0, 0, 4, 0, 0, 0, 0
+	.byte	2, 0, 5, 3, 0, 0, 0, 0
+	.byte	1, 3, 4, 2, 0, 0, 0, 0
+	.byte	1, 3, 4, 1, 0, 3, 0, 0
+	.byte	5, 4, 0, 2, 1, 2, 0, 0
+	.byte	1, 1, 1, 4, 5, 1, 0, 0
+StakanTestEnd:
+
+Stakan:
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+StakanEnd:
+
+Stakan2:
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+StakanEnd2:
+
+@include inc_cpu_sprites.mac
+@include inc_cpu_bgr.mac
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU Main code
+; //////////////////////////////////////////////////////////////////////////////
+
+; code will be automatically added 
+PPUStart:

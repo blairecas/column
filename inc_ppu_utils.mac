@@ -367,8 +367,9 @@ Print5:	mov	#5, R3
 	return
 
 ; print current score
-; R0 - score
+; R0 - score, R1 - level 1..8
 PrintScore:
+	mov	R1, -(SP)			; save level 
 	call	Print5
 	mov	#177010, R4
 	mov	#177014, R5
@@ -377,6 +378,7 @@ PrintScore:
 	asl	R2
 	asl	R2
 	add	LinesTable(R2), R1
+	mov	R1, -(SP)			; save vaddr
 	mov	R1, (R4)
 	mov	#5., R3
 	mov	#Msg000, R0
@@ -394,4 +396,22 @@ PrintScore:
 	.endr
 	sub	#40.*15.-1, (R4)
 	sob	R3, 10$
+	; draw level
+	mov	(SP)+, (R4)			; restore vaddr
+	add	#11., (R4)			; to right side
+	mov	(SP)+, R1			; restore level
+	dec	R1
+	bic	#^B1111111111111000, R1
+	inc	R1				; level must be 1..8
+	mul	#5., R1
+	add	#Font8x5, R1
+	mov	#40., R2
+	.rept	5.
+	movb	(R1), (R5)
+	add	R2, (R4)
+	movb	(R1), (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	.endr
 	return

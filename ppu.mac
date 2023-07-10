@@ -196,7 +196,7 @@ MusCur:	.word	0
 SndAdr:	.word	0
 
 ; music list addrs
-MusTab:	.word	0, Mus001
+MusTab:	.word	0, Mus001, Mus002
 
 ; sound list addrs
 SndTab:	.word	0, SND001, SND002, SND003, SND004, SND005, SND006, SND007
@@ -574,29 +574,36 @@ NoSound:	.byte	0
 ; C2-13 C#2-14  D2-15 D#2-16  E2-17  F2-18 F#2-19  G2-20 G#2-21  A2-22 A#2-23  B2-24
 ; C1-01 C#1-02  D1-03 D#1-04  E1-05  F1-06 F#1-07  G1-08 G#1-09  A1-10 A#1-11  B1-12
 
-; music #1
+; music #1 - game over
 MUS001:
 	.byte	13, 16, 20
 	.byte	13, 16
 	.byte	-1
-
 	.byte	13, 16, 20
 	.byte	13, 16
 	.byte	-1
-
 	.byte	13, 16, 20
 	.byte	13, 16
 	.byte	-1
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	8, 13, 16
+	.byte	0
+	.even
 
-	.byte	8, 13, 16
-	.byte	8, 13, 16
-	.byte	8, 13, 16
-	.byte	8, 13, 16
-	.byte	8, 13, 16
-	.byte	8, 13, 16
-	.byte	8, 13, 16
-	.byte	8, 13, 16
-
+; music #2 - level changed
+MUS002:
+	.byte	13, 17
+	.byte	13, 17
+	.byte	15, 18
+	.byte	15, 18
+	.byte	17, 20
+	.byte	17, 20
 	.byte	0
 	.even
 

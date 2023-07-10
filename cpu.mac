@@ -118,9 +118,12 @@ MainReset:
 	; print instructions and score
 	.ppexe	#CmdPrintInstr
 	mov	Score, R0
+	mov	Level, R1
 	.ppexe	#CmdPrintScore
 	clr	KeySpace
 	inc	CurrentMode
+	; DEBUG:
+	; mov	#199., Score
 	return
 
 ; 01 - awaiting start keypress
@@ -129,6 +132,9 @@ MainAwaitStart:
 	tst	KeySpace
 	beq	10$
 	clr	KeySpace
+	; some music
+	mov	#2., R0
+	.ppexe	#CmdMusicPlay
 	call	RedrawStakan
 	inc	CurrentMode
 10$:	return
@@ -159,6 +165,8 @@ MainPalkaNew:
 	mov	PalkaY, PalkaPrevY
 	clr	PalkaStopped
 	mov	Level, PalkaSpeed
+	; clear 'increase level' music flag
+	clr	LevelMusic
 	inc	CurrentMode
 	return
 
@@ -288,8 +296,25 @@ MainCheckRemove:
 	mov	ScoreMul, R3
 20$:	add	R0, Score
 	sob	R3, 20$
-	; print it
+	; adjust level?
 	mov	Score, R0
+	mov	Level, R5
+	mov	#1, Level
+	mov	#ScoreTable, R1
+	mov	#7., R3
+30$:	cmp	R0, (R1)+
+	blt	40$
+	inc	Level
+	sob	R3, 30$
+40$:	; was it adjusted?
+	cmp	Level, R5
+	beq	50$
+	mov	#2, R0
+	.ppexe	#CmdMusicPlay
+	inc	LevelMusic		; set flag to play music instead of 'popping' sound
+50$:	; print it
+	mov	Score, R0
+	mov	Level, R1
 	.ppexe	#CmdPrintScore	
 	clr	DrawRemoveCnt		; clear animation counter
 	mov	#8., CurrentMode	; switch to 'draw removing animations'
@@ -377,6 +402,8 @@ MainDrawRemove:
 	bit	#^B111, FrameCount	; every 8th frame
 	bne	99$
 	tst	DrawRemoveCnt
+	bne	2$
+	tst	LevelMusic		; maybe we are played music instead
 	bne	2$
 	mov	#2, R0			; play 'removing' sound
 	.ppexe	#CmdSoundPlay
@@ -725,6 +752,8 @@ Level:		.word	0
 Score:		.word	0
 ScoreMul:	.word	0		; score multiply 
 Hiscore:	.word	0
+ScoreTable:	.word	200., 600., 1200., 1800., 2400., 3000., 4000., 10000.
+LevelMusic:	.word	0
 
 CurrentMode:	.word	0
 DebugMode:	.word	177777
@@ -764,22 +793,6 @@ TempR4:		.word	0
 TempR5:		.word	0
 
 ; Actual stakan is 6 x 13, added some bytes for simplier code
-StakanTest:
-	.byte	2, 3, 0, 2, 1, 0, 0, 0
-	.byte	3, 0, 0, 0, 0, 0, 0, 0
-	.byte	0, 5, 3, 2, 0, 3, 0, 0
-	.byte	4, 1, 2, 2, 0, 0, 0, 0
-	.byte	0, 0, 0, 0, 0, 0, 0, 0
-	.byte	0, 1, 1, 0, 0, 3, 0, 0
-	.byte	0, 0, 0, 2, 0, 3, 0, 0
-	.byte	2, 0, 0, 4, 0, 0, 0, 0
-	.byte	2, 0, 5, 3, 0, 0, 0, 0
-	.byte	1, 3, 4, 2, 0, 0, 0, 0
-	.byte	1, 3, 4, 1, 0, 3, 0, 0
-	.byte	5, 4, 0, 2, 1, 2, 0, 0
-	.byte	1, 1, 1, 4, 5, 1, 0, 0
-StakanTestEnd:
-
 Stakan:
 	.byte	0, 0, 0, 0, 0, 0, 0, 0
 	.byte	0, 0, 0, 0, 0, 0, 0, 0

@@ -74,26 +74,23 @@ MainCycle:
 	asl	R0
 	call	@MainCycleTable(R0)
 	; debug output
-	call	DebugInfo	
+	; call	DebugInfo
 	jmp	MainCycle
 
 MainCycleTable:	
-	.word	MainReset		; 00 - reset
-	.word	MainPalkaNew		; 01
-	.word	MainPalkaFall		; 02
-	.word	MainPalkaFix		; 03
-	.word	MainDropDown		; 04
-	.word	MainCheckRemove		; 05
-	.word	MainCheckOver		; 06
-	.word	MainDrawRemove		; 07
+	.word	MainReset		; 00. - reset
+	.word	MainAwaitStart		; 01. - awaiting start
+	.word	MainPalkaNew		; 02.
+	.word	MainPalkaFall		; 03.
+	.word	MainPalkaFix		; 04.
+	.word	MainDropDown		; 05.
+	.word	MainCheckRemove		; 06.
+	.word	MainCheckOver		; 07.
+	.word	MainDrawRemove		; 08.
 
 
 ; 00 - reset anything to a new
 MainReset:
-	; wait for keypress
-	clr	KeySpace
-10$:	tst	KeySpace
-	beq	10$
 	; reset vars
 	mov	#1., Level
 	clr	Score
@@ -117,20 +114,26 @@ MainReset:
 	clr	(R2)+
 	sob	R3, .-4
 	call	RedrawStakan
-	; DEBUG
-	; copy test stakan onto stakan
-;	mov	#StakanTest, R0
-;	mov	#Stakan, R1
-;	mov	#Stakan2, R2
-;	mov	#StakanEnd-Stakan/2, R3
-;10$:	mov	(R0)+, (R1)+
-;	clr	(R2)+
-;	sob	R3, 10$
-	; DEBUG
+	call	DrawNext
+	; print instructions and score
+	.ppexe	#CmdPrintInstr
+	mov	Score, R0
+	.ppexe	#CmdPrintScore
+	clr	KeySpace
 	inc	CurrentMode
 	return
 
-; 01 - start new palka
+; 01 - awaiting start keypress
+MainAwaitStart:
+	; wait for keypress
+	tst	KeySpace
+	beq	10$
+	clr	KeySpace
+	call	RedrawStakan
+	inc	CurrentMode
+10$:	return
+
+; 02 - start new palka
 MainPalkaNew:
 	; next -> palka
 	movb	@#PalkaNext, @#Palka
@@ -159,7 +162,7 @@ MainPalkaNew:
 	inc	CurrentMode
 	return
 
-; 02 - palka is falling down
+; 03 - palka is falling down
 MainPalkaFall:
 	call	DrawPalka
 	; test for clearing prev
@@ -223,13 +226,17 @@ MainPalkaFall:
 	tst	KeyDown
 	beq	70$
 	clr	KeyDown
+	; already at max speed?
+	cmp	#8.*4., PalkaSpeed
+	ble	70$
 	mov	#1., R0
 	.ppexe	#CmdSoundPlay
 	mov	#8.*4., PalkaSpeed
 70$:
 	return
 
-; 03 - fixing palka figures in stakan
+
+; 04 - fixing palka figures in stakan
 MainPalkaFix:
 	mov	PalkaY, R2
 	; skip unlaceable
@@ -253,10 +260,10 @@ MainPalkaFix:
 	sob	R3, 30$
 99$:	; switch to 'check remove' mode
 	clr	ScoreMul
-	mov	#5., CurrentMode
+	mov	#6., CurrentMode
 	return
 
-; 04 - figures are dropping down
+; 05 - figures are dropping down
 MainDropDown:
 	bit	#^B11, FrameCount	; every 4th frame
 	bne	99$
@@ -267,13 +274,13 @@ MainDropDown:
 	inc	CurrentMode
 99$:	return
 
-; 05 - check removal
+; 06 - check removal
 MainCheckRemove:
 	call	RedrawStakan
 	call	CheckRemove
 	tst	FigRemoved		; did we removed something?
 	bne	10$
-	mov	#6., CurrentMode	; switch to 'check for game over'
+	mov	#7., CurrentMode	; switch to 'check for game over'
 	return
 10$:	; add score
 	call	GetScore
@@ -281,15 +288,18 @@ MainCheckRemove:
 	mov	ScoreMul, R3
 20$:	add	R0, Score
 	sob	R3, 20$
+	; print it
+	mov	Score, R0
+	.ppexe	#CmdPrintScore	
 	clr	DrawRemoveCnt		; clear animation counter
-	mov	#7., CurrentMode	; switch to 'draw removing animations'
+	mov	#8., CurrentMode	; switch to 'draw removing animations'
 	return
 
-; 06 - check for game over
+; 07 - check for game over
 MainCheckOver:
 	tstb	@#Stakan+2
 	bne	10$
-	mov	#1., CurrentMode	; switch to 'new palka' mode
+	mov	#2., CurrentMode	; switch to 'new palka' mode
 	return
 10$:	; music 'ta da da da'
 	mov	#1., R0
@@ -354,10 +364,15 @@ MainCheckOver:
 	cmp	Score, Hiscore
 	ble	40$
 	mov	Score, Hiscore
-40$:	clr	CurrentMode		; reset game
+40$:	; wait for keypress
+	clr	KeySpace
+	tst	KeySpace
+	beq	.-4
+	clr	KeySpace
+	clr	CurrentMode		; reset game
 	return
 
-; 07 - remove figures
+; 08 - remove figures
 MainDrawRemove:
 	bit	#^B111, FrameCount	; every 8th frame
 	bne	99$
@@ -384,7 +399,7 @@ MainDrawRemove:
 	mov	#StakanEnd2-Stakan2/2, R3
 	clr	(R1)+
 	sob	R3, .-2
-	mov	#4., CurrentMode	; switch to 'drop down again'
+	mov	#5., CurrentMode	; switch to 'drop down again'
 99$:	return
 
 
@@ -578,8 +593,10 @@ CheckTilesAddition:
 	clr	TilesAddition
 	br	90$
 20$:	mov	#6., TilesAddition
-90$:	call	RedrawStakan
-	call	DrawNext
+90$:	cmp	CurrentMode, #1.	; if not at 'awaiting start'
+	beq	92$
+	call	RedrawStakan
+92$:	call	DrawNext
 	return
 
 ; can palka go down?

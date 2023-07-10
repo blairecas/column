@@ -1,6 +1,7 @@
 *.lst
 *.obj
 *.dat
+*.zip
 _cpu.mac
 _ppu.mac
 _ppu_bytes.mac

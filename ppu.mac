@@ -112,6 +112,8 @@ CommandsTable:
 	.word	DrawPalkaTile		; 09. draw floating palka tile
 	.word	DrawBlackTile		; 10. draw black lines tile
 	.word	DrawBack		; 11. unpack blue background plane-0 to vram
+	.word	PrintInstr		; 12. print instructions
+	.word	PrintScore		; 13. print score
 
 	
 ; //////////////////////////////////////////////////////////////////////////////
@@ -649,6 +651,7 @@ SND007:	.word	SND_TONE, 1, 6*256,  0, 	156, 0, 156, 0
 
 ; // SPRITES ////////////////////////////////////////////////////////////////////
 
+@include inc_ppu_font.mac
 @include inc_ppu_sprites.mac
 @include inc_ppu_bgr.mac
 

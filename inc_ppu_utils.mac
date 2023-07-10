@@ -5,6 +5,130 @@ SetVreg:
 	mov	#177010, R4		; R4 = vaddr reg
 	mov	#177012, R5		; R5 = vdata reg
 	return
+; set second type of vaddr regs
+SetVreg2:
+	mov	#177010, R4		; R4 = vaddr reg
+	mov	#177024, R5		; R5 = vdata reg for output
+	return
+; from R1=X*8,R2=Y return R1=vaddr
+Coords8ToVaddr:
+	asl	R2			; get vaddr
+	asl	R2
+	add	VLinesTable(R2), R1	; get Y-line from lines table
+	return
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PRINT UTILS
+; //////////////////////////////////////////////////////////////////////////////
+
+PrintSIVA:	.word	0		; initial vline addr for using CR in text
+
+; single height 6-pix width character print, 0-pix shift
+; input: R1=SCRWID, R3=DY=8., (R0)=char spr addr, (R4),(R5)-vaddr,vdata pair (177010, 177024)
+;        2(SP) - vaddr to output
+; return: R0 - next char print routine addr-2
+ChrPrint1x0:
+10$:	movb	(R0)+, (R5)		; draw 6-pix in byte, movb - do not clear background
+	add	R1, (R4)		; R1=80. here
+	sob	R3, 10$			; R3=8.
+	dec	2(SP)			; for not advance vaddr, next char is at same position
+	mov	PC, R0			; return next char routine addr-2
+	return
+; single height, 6-pix shift
+	dec	R1			; R1=79. - vaddr addition
+20$:	movb	(R0)+, R2
+	ash	#6., R2
+	movb	R2, (R5)
+	inc	(R4)
+	swab	R2
+	movb	R2, (R5)
+	add	R1, (R4)
+	sob	R3, 20$
+	mov	PC, R0			; return next char routine addr-2
+	return
+; single height, 4-pix shift
+	dec	R1
+30$:	movb	(R0)+, R2
+	ash	#4., R2
+	movb	R2, (R5)
+	inc	(R4)
+	swab	R2
+	movb	R2, (R5)
+	add	R1, (R4)
+	sob	R3, 30$
+	mov	PC, R0
+	return
+; single height, 2-pix shift
+40$:	movb	(R0)+, R2
+	asl	R2
+	asl	R2
+	movb	R2, (R5)
+	add	R1, (R4)
+	sob	R3, 40$
+	mov	#<ChrPrint1x0-2>, R0	; back to default 0-pix shift
+	return	
+
+
+; print string, R0 - ID of string in TxtTable, R1 - x*8, R2 - y
+; if R0 > 1000(8) - then R0 is string addr (can be in vaddr too)
+; codes in string - [0..7] - change color
+; registers: 177020, 177022 - background color (not used)
+PrintStr:
+	call	SetVreg2		; R4=177010, R5=177024
+	mov	#ChrPrint1x0, 30$+2	; set initial char print routine
+	call	PrintGetR0		; R0 = text address 
+	mov	R0, 10$+2		; set vaddr character pointer
+	call	Coords8ToVaddr		; R1 = vaddr
+	mov	R1, PrintSIVA		; initial vline address
+	mov	R1, -(SP)		; save it also
+	mov	#7, @#177016		; current color	
+10$:	; get character
+	mov	#100000, (R4)		; set current char addr
+	inc	10$+2			; advance it
+	mov	@#177012, R0		; get character, high byte is always zero !??? (honestly, i don't know)
+	beq	99$			; zero byte - exit
+	cmp	R0, #32.		; special code? (color)
+	bhis	20$			; no - continue to draw character
+	; set color or CR
+	cmp	R0, #10.		; is it CR?
+	bne	18$
+	add	#SCRWID*8., PrintSIVA	; new vline
+	mov	PrintSIVA, (SP)		; set it
+	mov	#ChrPrint1x0, 30$+2	; set initial char print routine for newline
+	br	10$
+18$:	mov	R0, @#177016		; set new text color
+	br	10$
+20$:	; prepare regs
+	asl	R0			; get font tile addr
+	asl	R0
+	asl	R0
+	add	#FontAddr-256., R0	; R0 = font tile addr (-256. because starting from char #32.)
+	mov	#SCRWID, R1		; vaddr next line addition
+	mov	#8., R3			; font DY
+	mov	(SP), (R4)		; set vaddr
+	; draw char
+30$:	call	ChrPrint1x0		; <-- this routine will be modified 
+	inc	R0			; return value is next routine <#addr-2>
+	inc	R0
+	mov	R0, 30$+2		; modify to next char printing routine addr
+	inc	(SP)			; advance vaddr to next char position
+	br	10$	
+99$:	tst	(SP)+			; restore stack used for vaddr
+	return 
+
+; if R0 <= 1000 - get text addr in R0
+; else R0 is already text address
+PrintGetR0:
+	cmp	R0, #1000		; R0 is addr or ID?
+	bhi	05$			; its addr
+;	asl	R0			; get str addr from ID
+;	mov	TxtTable(R0), R0
+05$:	return 
+
+
+; ////////////////////////////////////////////////////////////////////
+; // Drawing 
+; ////////////////////////////////////////////////////////////////////
 
 ; draws a tile
 ; R0 = tile #, R1 = X (chars), R2 = Y (R1 must be EVEN)
@@ -195,4 +319,79 @@ DrawBack:
 	mov	#100000, PutA00
 	mov	#PpuBgr, GetA00
 	call	Unpa02
+	return
+
+
+Msg000:	.asciz	"00000"
+Msg001:	.asciz	<7>"  Î1"<6>" ¡Ã…‘“¡"
+Msg002:	.asciz	<7>"  K2"<6>" Ù¡ ÃŸ"
+Msg003:	.asciz	<7>" ıÛÙ"<6>" ¡’⁄¡"
+Msg004:	.asciz	<7>"ÛÙÔ"<6>" Û¬“œ”"
+Msg005:	.asciz	<7>"  ÚÔ‚ÂÏ"<6>" ÛÙ·ÚÙ"
+	.even
+
+; print usage strings
+PrintInstr:
+	mov	#Msg001, R0
+	mov	#STAKAN_START_X+1, R1
+	mov	#80., R2
+	call	PrintStr
+	mov	#Msg002, R0
+	mov	#STAKAN_START_X+1, R1
+	mov	#90., R2
+	call	PrintStr
+	mov	#Msg003, R0
+	mov	#STAKAN_START_X+1, R1
+	mov	#100., R2
+	call	PrintStr
+	mov	#Msg004, R0
+	mov	#STAKAN_START_X+1, R1
+	mov	#110., R2
+	call	PrintStr
+	mov	#Msg005, R0
+	mov	#STAKAN_START_X, R1
+	mov	#140., R2
+	call	PrintStr
+	return
+
+; convert decimal 5-digits to 1,2,3,4,5 bytes 
+; R0 = number
+Print5:	mov	#5, R3
+	mov	#Msg000+5, R5
+1$:	mov	R0, R1
+	clr	R0
+	div	#10., R0
+;	add	#'0, R1
+	movb	R1, -(R5)
+	sob	R3, 1$
+	return
+
+; print current score
+; R0 - score
+PrintScore:
+	call	Print5
+	mov	#177010, R4
+	mov	#177014, R5
+	mov	#STAKAN_START_X, R1
+	mov	#STAKAN_START_Y-24., R2
+	asl	R2
+	asl	R2
+	add	LinesTable(R2), R1
+	mov	R1, (R4)
+	mov	#5., R3
+	mov	#Msg000, R0
+10$:	movb	(R0)+, R1
+	mul	#5., R1
+	add	#Font8x5, R1
+	mov	#40., R2
+	.rept	5.
+	movb	(R1), (R5)
+	add	R2, (R4)
+	movb	(R1), (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	.endr
+	sub	#40.*15.-1, (R4)
+	sob	R3, 10$
 	return

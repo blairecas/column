@@ -13,6 +13,8 @@ CmdDrawTile       =  8.		; draw tile
 CmdDrawPalkaTile  =  9.		; draw floating palka tile
 CmdDrawBlackTile  = 10.         ; draw black lines tile
 CmdDrawBack       = 11.		; unpack blue background plane-0 to vram
+CmdPrintInstr     = 12.		; print usage instructions
+CmdPrintScore     = 13.		; print score
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Drawing 

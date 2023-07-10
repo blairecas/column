@@ -79,7 +79,7 @@ PPULoaderStart:
 	mov	(R0)+, (R1)+
 	sob	R3, .-2
 	jmp	@#77400
-10$:	; copy nearly all VRAM -> RAM
+10$:	; copy CPU VRAM -> PPU RAM
 	mov	#177010, R4
 	mov	#177014, R5
 	mov	#100000, (R4)		; from vaddr = 100000

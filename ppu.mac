@@ -623,12 +623,13 @@ SND_PAUSE_TIMER	= 50*256
 ; london bridge is falling down..
 SND001:	.word	SND_TONE, 16, 01*256, 0,	125, 5,  125, 5
 	.word	0
-; spadeing
+; figures popping
 SND002:	.word	SND_TONE, 05, 01*256, 0,	10, 1, 100, -15
 	.word	0
-; add item
+; colors rotated
 SND003:	.word	SND_TONE, 01, 01*256, 0,	125, 1, 125, 1
 	.word	0
+
 ; eat item
 SND004:	.word	SND_TONE, 06, 10*256, -1*256,	50, 10, 30, 20
 	.word	SND_TONE, 04, 2*256, 2*256,	120, -10, 120, -20

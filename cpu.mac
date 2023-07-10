@@ -202,10 +202,6 @@ MainPalkaFall:
 	mov	R0, PalkaY
 	dec	TempR0
 	bgt	24$
-	mov	PalkaY4, R0
-	asr	R0
-	asr	R0
-	mov	R0, PalkaY
 	; check keys
 30$:	tst	KeyLeft
 	beq	40$

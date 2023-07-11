@@ -1,47 +1,44 @@
 <?php
-
-    // TLDR: relative ' addrs are not linking right! It will NOT work with a regular macro11
+    // WARNING: relative ' addrs are not converted right! 
+    // It will NOT work with a regular RT-11 MACRO11
     // only works with .ASECT and non-standard macro11.exe listing files!!!
     // (and yes I am lazy to do smth right here, it works and ok..)
     
-    $prefix = '_';
+    // sav mode restrictions:
+    // - very simple first block
+    // - start and stack set on 0x200
+
+    $input_fname = $argv[1];
+    $output_fname = $argv[2];
+    $mode = $argv[3];
+
+    if ($mode !== 'bin' && $mode !== 'mac' && $mode !== 'sav') {
+        echo "Usage: php.exe -f lst2bin.php in_fname out_fname mode\n";
+        echo "in_fname - .lst filename\n";
+        echo "mode = bin, mac or sav";
+        exit(1);
+    }
 
     $allRAM = Array(
-        'cpu'      => Array(),
-        'cpumax'   => 0377777,	// CPU maximal addr (CPU RAM + VRAM planes 1,2)
-        'ppu'	   => Array(),
-        'ppumax'   => 0177777,	// PPU maximal addr (PPU RAM + VRAM plane 0)
-        'ppuused'  => 0         // PPU current maximal addr (+2 and &FFFFFFFE just in case)
+        'ram'      => Array(),
+        'max'      => 0xFFFF,
+        'min'      => 0,
+        'high'     => 0
     );
 
+    if ($mode == 'sav') $allRAM['min'] = 0x200;
+
     $lnum = 0;
-
-    echo "\n";
     $current_line = "";
-    // ProcessFile('cpu');
-    ProcessFile('ppu');
 
-    // write CPU data file
-    // $fname = $prefix . 'cpu.dat';
-    // $fout = fopen($fname, "w");
-    // WriteSection($fout, 'cpu', 0, 0156000);
-    // fclose($fout);
+    ProcessFile();
 
-    $fname = $prefix . 'ppu_bytes.mac';
-    $fout = fopen($fname, "w");
-    WriteTextSection($fout, 'ppu', 0, $allRAM['ppuused']);
-    fclose($fout);
+    if ($mode == 'mac') WriteMac(0, $allRAM['high']);
+    if ($mode == 'bin') WriteBin(0, $allRAM['high']);
+    if ($mode == 'sav') WriteSav();
 
-    // $fname = $prefix . 'r12.dat';
-    // $fout = fopen($fname, "w");
-    // WriteSection($fout, 'cpu', 0256700, 0400000);
-    // fclose($fout);
+    exit(0);
 
-    // $fname = $prefix . 'r00.dat';
-    // $fout = fopen($fname, "w");
-    // WriteSection($fout, 'ppu', 0127340, 0200000);
-    // fclose($fout);
-    
 ////////////////////////////////////////////////////////////////////////////////
 
 $ssline0 = "";
@@ -59,22 +56,20 @@ function exit_with_error ($s)
 }
 
 
-function ProcessFile ( $processor )
+function ProcessFile ()
 {
-    global $prefix, $allRAM;
-    global $current_line;    
-    $fname = strtoupper($prefix . $processor . '.lst');    
-    echo "processing $fname\n";
+    global $input_fname, $current_line;
+    echo "processing $input_fname\n";
     $lcount = 0;
-    $fin = fopen($fname, "r");
+    $fin = fopen($input_fname, "r");
     if ($fin === false) {
-        echo "ERROR: file $fname not found\n";
+        echo "ERROR: file $input_fname not found\n";
         exit(1);
     }    
     while (!feof($fin))
     {
         $current_line = fgets($fin);
-        $b = UseLine($current_line, $processor);
+        $b = UseLine($current_line);
         if (!$b) break;
         $lcount++;
     }
@@ -83,7 +78,7 @@ function ProcessFile ( $processor )
 }
 
 
-function UseLine ( $sline, $processor )
+function UseLine ( $sline )
 {
     global $lnum;
     global $ssline0, $ssline1, $ssline2;
@@ -143,9 +138,9 @@ function UseLine ( $sline, $processor )
     
     // DEBUG: echo decoct($gAddr)."-".$type0."\t\t".decoct($oct1)."-".$type1."\t\t".decoct($oct2)."-".$type2."\t\t".decoct($oct3)."-".$type3."\n";
     // now we have addr and up to three octals
-    $gAddr = PutBytes($gAddr, $oct1, $type1, $processor);
-    $gAddr = PutBytes($gAddr, $oct2, $type2, $processor);
-    $gAddr = PutBytes($gAddr, $oct3, $type3, $processor);
+    $gAddr = PutBytes($gAddr, $oct1, $type1);
+    $gAddr = PutBytes($gAddr, $oct2, $type2);
+    $gAddr = PutBytes($gAddr, $oct3, $type3);
     return true;
 }
 
@@ -205,63 +200,36 @@ function GetOctal ( $s, &$num, &$type )
 }
 
 
-function PutBytes ($adr, $w, $type, $proc)
+function PutBytes ($adr, $w, $type)
 {
     global $allRAM, $lnum;
     global $current_line;
-
-    if ($adr > $allRAM[$proc.'max']) {
+    if ($adr > $allRAM['max'] || $adr < $allRAM['min'])
+    {
         echo "ERROR: address $adr is out of range on line $lnum\n";
 	    echo "$current_line\n";
         exit(1);
     }
-    // set maximal addr
-    if ((($adr+2)&0xFFFFFFFE) > $allRAM[$proc.'used']) $allRAM[$proc.'used'] = (($adr+2)&0xFFFFFFFE);
     // type == 0 - don't use this
     if ($type == 0) return $adr;
     // type == 1 - its a byte
     if ($type == 1) { 
-        $allRAM[$proc][$adr] = $w & 0xFF;
+        $allRAM['ram'][$adr] = $w & 0xFF;
+        // set maximal addr
+        if ($adr > $allRAM['high']) $allRAM['high'] = $adr;
         return $adr+1; // return next addr
     }
     // type == 2|3 - its a word
     if ($type == 2 || $type == 3) {
-        $allRAM[$proc][$adr] = $w & 0xFF;
-        $allRAM[$proc][$adr+1] = ($w>>8) & 0xFF;
+        $allRAM['ram'][$adr] = $w & 0xFF;
+        $allRAM['ram'][$adr+1] = ($w>>8) & 0xFF;
+        // set maximal addr
+        if (($adr+1) > $allRAM['high']) $allRAM['high'] = ($adr+1);
         return $adr+2;
     }
     echo "ERROR in PutBytes() $adr $w $type on line $lnum\n";
     echo "$current_line\n";
     exit(1);
-}
-
-
-// not including $end address
-function WriteSection ($g, $proc, $start, $end)
-{
-    global $allRAM;
-    $length = $end - $start;
-    for ($i=$start; $i<($start+$length); $i++)
-    {
-        $byte = 0x00;
-        if (isset($allRAM[$proc][$i])) $byte = $allRAM[$proc][$i];
-        $s = chr($byte); fwrite($g, $s, 1);
-    }
-}
-
-
-function WriteTextSection ($g, $proc, $start, $end)
-{
-    global $allRAM;
-    for ($i=$start, $n=0; $i<=$end; $i++)
-    {
-        if ($n==0) fputs($g, "\t.byte\t");
-        $byte = 0x00; if (isset($allRAM[$proc][$i])) $byte = $allRAM[$proc][$i];
-        fputs($g, decoct($byte));
-        $n++;
-        if ($n < 16) { if ($i<$end) fputs($g, ", "); } else { $n=0; fputs($g, "\n"); }
-    }
-    fputs($g, "\n\t.even\nPPUEnd:\n\n\t.end\tSTART\n");
 }
 
 
@@ -272,4 +240,74 @@ function WriteWord ($g, $w)
     $b2 = ($w & 0xFF00) >> 8;
     fwrite($g, chr($b1));
     fwrite($g, chr($b2));
+}
+
+
+function WriteBin ($start, $end)
+{
+    global $allRAM, $output_fname;
+    $g = fopen($output_fname, 'w');
+    for ($i=$start; $i<=$end; $i++)
+    {
+        $byte = 0x00;
+        if (isset($allRAM['ram'][$i])) $byte = $allRAM['ram'][$i];
+        $s = chr($byte); fwrite($g, $s, 1);
+    }
+    fclose($g);
+}
+
+
+function WriteMac ($start, $end)
+{
+    global $allRAM, $output_fname;
+    $g = fopen($output_fname, 'w');
+    for ($i=$start, $n=0; $i<=$end; $i++)
+    {
+        if ($n==0) fputs($g, "\t.byte\t");
+        $byte = 0x00; if (isset($allRAM['ram'][$i])) $byte = $allRAM['ram'][$i];
+        fputs($g, decoct($byte));
+        $n++;
+        if ($n < 16) { if ($i<$end) fputs($g, ", "); } else { $n=0; fputs($g, "\n"); }
+    }
+    fputs($g, "\n");
+    fclose($g);
+}
+
+
+function WriteSav ()
+{
+    global $allRAM;
+    // clear first block
+    for ($i=0; $i<0x200; $i++) $allRAM['ram'][$i] = 0;
+    $allRAM['ram'][0x21] = 0x02;    // 0x20-0x21 - relative start addr (0x0200)
+    $allRAM['ram'][0x23] = 0x02;    // 0x22-0x23 - initial location of stack pointer (0x0200)
+    // 0x28-0x29 - program's high limit - word aligned?
+    $high = ($allRAM['high']+2) & 0xFFFE;
+    $allRAM['ram'][0x28] = ($high & 0xFF);
+    $allRAM['ram'][0x29] = (($high & 0xFF00) >> 8);
+    // 0xF0-0xFF - bitmask area - to load blocks from file [11111000][...] bytes, bits are readed from high to low
+    $adr = $high - 1;
+    if ($adr < 0x200) {
+        echo "ERROR: sav mode must be with at least 2 blocks!";
+        exit(1);
+    }
+    $block0adr = 0xF0;
+    $block0byte = 0;
+    $rotcount = 0;        
+    while ($adr >= 0) {
+        $block0byte = ($block0byte >> 1) | 0x80;
+        $rotcount++;
+        if ($rotcount >= 8) {
+            $rotcount = 0;
+            $allRAM['ram'][$block0adr] = $block0byte;
+            $block0adr++;
+            $block0byte = 0;
+        }
+        $adr -= 512;
+    }
+    $allRAM['ram'][$block0adr] = $block0byte;
+    // align high to 512-bytes
+    $allRAM['high'] = (($allRAM['high']+512) & 0xFE00) - 1;
+    // save 
+    WriteBin(0, $allRAM['high']);
 }

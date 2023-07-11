@@ -318,7 +318,7 @@ RedrawStakan:
 	add	#2, VarX
 	dec	TempR2
 	bne	20$
-	add	#2, VarAddr		; stakan is 8*16 but drawing space is 6*13
+	add	#2, VarAddr		; stakan is 8.*13. but drawing space is 6.*13.
 	add	#2, VarAddr2
 	add	#16., VarY
 	dec	TempR3

@@ -2,6 +2,8 @@
 *.obj
 *.dat
 *.zip
+*.bin
 _cpu.mac
 _ppu.mac
-_ppu_bytes.mac
+system.dsk
+rt11.exe

@@ -6,8 +6,7 @@
 
 @include inc_common.mac
 
-START:	nop
-	mtps	#200
+START:	mtps	#200
 	mov	#1000, SP
 
 	; launch code in PPU
@@ -748,7 +747,7 @@ Level:		.word	0
 Score:		.word	0
 ScoreMul:	.word	0		; score multiply 
 Hiscore:	.word	0
-ScoreTable:	.word	200., 600., 1200., 1800., 2400., 3000., 4000., 10000.
+ScoreTable:	.word	400., 800., 1200., 1800., 2400., 3000., 4000., 10000.
 LevelMusic:	.word	0
 
 CurrentMode:	.word	0
@@ -828,5 +827,9 @@ StakanEnd2:
 ; // PPU Main code
 ; //////////////////////////////////////////////////////////////////////////////
 
-; code will be automatically added 
 PPUStart:
+@include inc_cpu_ppu.mac
+	.even
+PPUEnd:
+
+	.end	START

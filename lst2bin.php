@@ -1,9 +1,8 @@
 <?php
     // WARNING: relative ' addrs are not converted right! 
     // It will NOT work with a regular RT-11 MACRO11
-    // only works with .ASECT and non-standard macro11.exe listing files!!!
-    // (and yes I am lazy to do smth right here, it works and ok..)
-    
+    // only works with .asect, .enabl AMA and macro11.exe listing files!
+
     // sav mode restrictions:
     // - very simple first block
     // - start and stack set on 0x200
@@ -21,7 +20,7 @@
 
     $allRAM = Array(
         'ram'      => Array(),
-        'max'      => 0xFFFF,
+        'max'      => 0xDFFF, /* 0157777 */
         'min'      => 0,
         'high'     => 0
     );

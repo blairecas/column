@@ -325,61 +325,12 @@ MainCheckOver:
 	mov	#1., R0
 	.ppexe	#CmdMusicPlay
 	; draw 'game over'
-	; clear upper line
-	mov	#STAKAN_START_X, TempR1
-	mov	#5.*16.+STAKAN_START_Y, TempR2
-	mov	#6., TempR3
-20$:	mov	TempR1, R1
-	mov	TempR2, R2
-	clr	R0
-	.ppexe	#CmdDrawTile
-	call	DrawTile
-	add	#2., TempR1
-	dec	TempR3
-	bne	20$
-	; draw game over line
-	mov	#STAKAN_START_X, R1
-	mov	#6.*16.+STAKAN_START_Y, R2
-	clr	R0
-	.ppexe	#CmdDrawTile
-	call	DrawTile
-	mov	#STAKAN_START_X+2., R1
-	mov	#6.*16.+STAKAN_START_Y, R2
-	mov	#26., R0
-	.ppexe	#CmdDrawTile
-	call	DrawTile
-	mov	#STAKAN_START_X+4., R1
-	mov	#6.*16.+STAKAN_START_Y, R2
-	mov	#27., R0
-	.ppexe	#CmdDrawTile
-	call	DrawTile
-	mov	#STAKAN_START_X+6., R1
-	mov	#6.*16.+STAKAN_START_Y, R2
-	mov	#28., R0
-	.ppexe	#CmdDrawTile
-	call	DrawTile
-	mov	#STAKAN_START_X+8., R1
-	mov	#6.*16.+STAKAN_START_Y, R2
-	mov	#29., R0
-	.ppexe	#CmdDrawTile
-	call	DrawTile
-	mov	#STAKAN_START_X+10., R1
-	mov	#6.*16.+STAKAN_START_Y, R2
-	clr	R0
-	.ppexe	#CmdDrawTile
-	call	DrawTile
-	; clear bottom line
-	mov	#STAKAN_START_X, TempR1
-	mov	#7.*16.+STAKAN_START_Y, TempR2
-	mov	#6., TempR3
-30$:	mov	TempR1, R1
-	mov	TempR2, R2
-	clr	R0
-	.ppexe	#CmdDrawTile
-	call	DrawTile
-	add	#2., TempR1
-	dec	TempR3
-	bne	30$
+	mov	#8.*5.+Stakan, R0
+	mov	#GamoverTiles, R1
+	mov	#12., R3
+	mov	(R1)+, (R0)+
+	sob	R3, .-2
+	call	RedrawStakan
 	; hiscore
 	cmp	Score, Hiscore
 	ble	40$
@@ -747,7 +698,7 @@ Level:		.word	0
 Score:		.word	0
 ScoreMul:	.word	0		; score multiply 
 Hiscore:	.word	0
-ScoreTable:	.word	400., 800., 1200., 1800., 2400., 3000., 4000., 10000.
+ScoreTable:	.word	500., 1000., 1500., 2000., 3000., 4000., 6000., 10000.
 LevelMusic:	.word	0
 
 CurrentMode:	.word	0
@@ -786,6 +737,11 @@ TempR2:		.word	0
 TempR3:		.word	0
 TempR4:		.word	0
 TempR5:		.word	0
+
+GamoverTiles:
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 26., 27., 28., 29., 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
 
 ; Actual stakan is 6 x 13, added some bytes for simplier code
 Stakan:

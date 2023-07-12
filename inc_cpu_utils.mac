@@ -195,7 +195,7 @@ PrintBinaryWord:
 	mov	R1, (R4)
 	mov	#SCRWID, R2
 	mov	#8., R3
-20$:	; first half of 8-bit vaddr
+20$:	; first half of 8-pixels
 	mov	#SprNumbers45, R1	; sprite 0
 	asl	R0
 	bcc	30$
@@ -237,9 +237,16 @@ PrintOctalWord:
 	mov	#3., R3
 	; 1st bit
 	clr	R1
+	br	22$
+20$:	; first half of 8-pixels
+	clr	R1
 	asl	R0
 	rol	R1
-20$:	; first half of 8-bit vaddr
+	asl	R0
+	rol	R1
+22$:	asl	R0
+	rol	R1	
+	; get normal spr addr
 	asl	R1
 	asl	R1
 	asl	R1
@@ -254,16 +261,16 @@ PrintOctalWord:
 	movb	(R1)+, (R5)
 	add	R2, (R4)
 	movb	(R1)+, (R5)
-	sub	#<SCRWID*4>, (R4)
-	; next 3-bits
+	sub	#SCRWID*4, (R4)
+	; second half - shifted sprites and BIS
 	clr	R1
 	asl	R0
 	rol	R1
 	asl	R0
 	rol	R1
 	asl	R0
-	rol	R1	
-	; second half - shifted sprites and BIS
+	rol	R1
+	; get shifted spr adr
 	asl	R1
 	asl	R1
 	asl	R1
@@ -279,14 +286,6 @@ PrintOctalWord:
 	add	R2, (R4)
 	bisb	(R1)+, (R5)
 	sub	#SCRWID*4-1, (R4)		; advance vaddr to next byte
-	; next 3-bits
-	clr	R1
-	asl	R0
-	rol	R1
-	asl	R0
-	rol	R1
-	asl	R0
-	rol	R1
 	sob	R3, 20$
 	return	 
 

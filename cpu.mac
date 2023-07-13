@@ -746,6 +746,7 @@ GamoverTiles:
 	.byte	0, 0, 0, 0, 0, 0, 0, 0
 	.byte	0, 26., 27., 28., 29., 0
 	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.even
 
 ; Actual stakan is 6 x 13, added some bytes for simplier code
 Stakan:

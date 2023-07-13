@@ -115,6 +115,7 @@ MainReset:
 	call	RedrawStakan
 	call	DrawNext
 	; print instructions and score
+	mov	LevelsInc, R0
 	.ppexe	#CmdPrintInstr
 	mov	Score, R0
 	mov	Level, R1
@@ -122,7 +123,7 @@ MainReset:
 	clr	KeySpace
 	inc	CurrentMode
 	; DEBUG:
-	; mov	#199., Score
+	; mov	#499., Score
 	return
 
 ; 01 - awaiting start keypress
@@ -136,7 +137,14 @@ MainAwaitStart:
 	.ppexe	#CmdMusicPlay
 	call	RedrawStakan
 	inc	CurrentMode
-10$:	return
+10$:	tst	KeyK3
+	beq	20$
+	clr	KeyK3
+	com	LevelsInc
+	call	RedrawStakan
+	mov	LevelsInc, R0
+	.ppexe	#CmdPrintInstr
+20$:	return
 
 ; 02 - start new palka
 MainPalkaNew:
@@ -263,7 +271,7 @@ MainPalkaFix:
 	sob	R3, 30$
 99$:	; switch to 'check remove' mode
 	clr	ScoreMul
-	mov	#6., CurrentMode
+	mov	#6., CurrentMode	; -> 'check remove'
 	return
 
 ; 05 - figures are dropping down
@@ -292,6 +300,8 @@ MainCheckRemove:
 20$:	add	R0, Score
 	sob	R3, 20$
 	; adjust level?
+	tst	LevelsInc
+	beq	50$
 	mov	Score, R0
 	mov	Level, R5
 	mov	#1, Level
@@ -349,7 +359,7 @@ MainDrawRemove:
 	bne	99$
 	tst	DrawRemoveCnt
 	bne	2$
-	tst	LevelMusic		; maybe we are played music instead
+	tst	LevelMusic		; maybe we are playing music instead
 	bne	2$
 	mov	#2, R0			; play 'removing' sound
 	.ppexe	#CmdSoundPlay
@@ -401,10 +411,6 @@ DropStakan:
 ; check and mark for remove
 CheckRemove:
 	clr	FigRemoved		; mark as 'nothing to remove'
-	mov	#Stakan2, R0		; clear removal animations
-	mov	#StakanEnd2-Stakan2/2, R3
-	clr	(R0)+
-	sob	R3, .-2
 	call	CheckRemUp
 	call	CheckRemRight
 	call	CheckRemRightUp
@@ -584,10 +590,9 @@ CanGoDown:
 	bic	#^B111, R2		; palka Y to stakan line addr
 	add	PalkaX, R2
 	tstb	Stakan(R2)
-	bne	90$
-	sec
-	return
-90$:	clc
+	beq	91$
+90$:	tst	(PC)+			; no
+91$:	sec				; yes
 	return
 
 ; can palka go left?
@@ -603,10 +608,9 @@ CanGoLeft:
 	add	R1, R2
 	dec	R2
 	tstb	Stakan(R2)
-	bne	90$
-	sec
-	return
-90$:	clc
+	beq	91$
+90$:	tst	(PC)+			; no
+91$:	sec				; yes
 	return
 
 ; can palka go right?
@@ -623,10 +627,9 @@ CanGoRight:
 	add	R1, R2
 	inc	R2
 	tstb	Stakan(R2)
-	bne	90$
-	sec
-	return
-90$:	clc
+	beq	91$
+90$:	tst	(PC)+			; no
+91$:	sec				; yes
 	return
 
 ; get 'removed' score
@@ -700,6 +703,7 @@ ScoreMul:	.word	0		; score multiply
 Hiscore:	.word	0
 ScoreTable:	.word	500., 1000., 1500., 2000., 3000., 4000., 6000., 10000.
 LevelMusic:	.word	0
+LevelsInc:	.word	177777
 
 CurrentMode:	.word	0
 DebugMode:	.word	177777

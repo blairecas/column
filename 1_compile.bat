@@ -35,10 +35,14 @@ if %ERRORLEVEL% NEQ 0 ( exit /b )
 
 echo.
 echo ===========================================================================
-echo Linking
+echo Linking and cleanup
 echo ===========================================================================
 ..\..\php5\php.exe -c ..\..\php5\ -f lst2bin.php _cpu.lst ./release/column.sav sav
 ..\..\macro11\rt11dsk.exe d column.dsk .\release\column.sav >NUL
 ..\..\macro11\rt11dsk.exe a column.dsk .\release\column.sav >NUL
+del _cpu_bgr.dat
+del _cpu_bgr_lz.dat
+del _ppu_bgr.dat
+del _ppu_bgr_lz.dat
 
 echo.

@@ -35,14 +35,15 @@ CmdBuffer	= 176000	; CPU<->PPU commands buffer (!) in CPU VRAM (!)
 ; Addrs are in CPU RAM - to use in PPU make sure they are <ADDR/2>
 
 ; Keyboard
-Key8		= 157712	; Key 8
-Key7		= 157714	; key 7
-Key6		= 157716	; key 6
-Key5		= 157720	; key 5
-Key4		= 157722	; key 4
-Key3		= 157724	; key 3
-Key2		= 157726	; key 2
-Key1		= 157730	; key 1
+Key8		= 157710	; Key 8
+Key7		= 157712	; key 7
+Key6		= 157714	; key 6
+Key5		= 157716	; key 5
+Key4		= 157720	; key 4
+Key3		= 157722	; key 3
+Key2		= 157724	; key 2
+Key1		= 157726	; key 1
+KeyK3		= 157730	; key K3
 KeyK2		= 157732	; key K2
 KeyK1		= 157734	; key K1
 KeyStop		= 157736	; key STOP

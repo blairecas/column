@@ -1,23 +1,3 @@
-LinesTable:
-	.word	100000, 100050, 100120, 100170, 100240, 100310, 100360, 100430, 100500, 100550, 100620, 100670, 100740, 101010, 101060, 101130
-	.word	101200, 101250, 101320, 101370, 101440, 101510, 101560, 101630, 101700, 101750, 102020, 102070, 102140, 102210, 102260, 102330
-	.word	102400, 102450, 102520, 102570, 102640, 102710, 102760, 103030, 103100, 103150, 103220, 103270, 103340, 103410, 103460, 103530
-	.word	103600, 103650, 103720, 103770, 104040, 104110, 104160, 104230, 104300, 104350, 104420, 104470, 104540, 104610, 104660, 104730
-	.word	105000, 105050, 105120, 105170, 105240, 105310, 105360, 105430, 105500, 105550, 105620, 105670, 105740, 106010, 106060, 106130
-	.word	106200, 106250, 106320, 106370, 106440, 106510, 106560, 106630, 106700, 106750, 107020, 107070, 107140, 107210, 107260, 107330
-	.word	107400, 107450, 107520, 107570, 107640, 107710, 107760, 110030, 110100, 110150, 110220, 110270, 110340, 110410, 110460, 110530
-	.word	110600, 110650, 110720, 110770, 111040, 111110, 111160, 111230, 111300, 111350, 111420, 111470, 111540, 111610, 111660, 111730
-	.word	112000, 112050, 112120, 112170, 112240, 112310, 112360, 112430, 112500, 112550, 112620, 112670, 112740, 113010, 113060, 113130
-	.word	113200, 113250, 113320, 113370, 113440, 113510, 113560, 113630, 113700, 113750, 114020, 114070, 114140, 114210, 114260, 114330
-	.word	114400, 114450, 114520, 114570, 114640, 114710, 114760, 115030, 115100, 115150, 115220, 115270, 115340, 115410, 115460, 115530
-	.word	115600, 115650, 115720, 115770, 116040, 116110, 116160, 116230, 116300, 116350, 116420, 116470, 116540, 116610, 116660, 116730
-	.word	117000, 117050, 117120, 117170, 117240, 117310, 117360, 117430, 117500, 117550, 117620, 117670, 117740, 120010, 120060, 120130
-	.word	120200, 120250, 120320, 120370, 120440, 120510, 120560, 120630, 120700, 120750, 121020, 121070, 121140, 121210, 121260, 121330
-	.word	121400, 121450, 121520, 121570, 121640, 121710, 121760, 122030, 122100, 122150, 122220, 122270, 122340, 122410, 122460, 122530
-	.word	122600, 122650, 122720, 122770, 123040, 123110, 123160, 123230, 123300, 123350, 123420, 123470, 123540, 123610, 123660, 123730
-	.word	124000, 124050, 124120, 124170, 124240, 124310, 124360, 124430, 124500, 124550, 124620, 124670, 124740, 125010, 125060, 125130
-	.word	125200, 125250, 125320, 125370, 125440, 125510, 125560, 125630, 125700, 125750, 126020, 126070, 126140, 126210, 126260, 126330 
-
 ; registers for accessing vram (or ram12)
 SetVreg:
 	mov	#176640, R4
@@ -328,12 +308,15 @@ RedrawStakan:
 ; R0 = tile #, R1 = X, R2 = Y (y-coords are 0..287, x-coords are /16pix)
 DrawTile:
 	call	SetVreg
-	asl	R2			; get vaddr of line start by Y
-	add	LinesTable(R2), R1	; add to X
-	mov	R1, (R4)		; set vaddr to (R4) vreg
-	ash	#6., R0			; tile offset (tiles in CPU is 64 bytes)
+	; set starting vaddr
+	mul	#SCRWID, R2
+	add	R1, R3
+	add	#VADDR, R3
+	mov	R3, (R4)
+	; tile offset (tiles in CPU is 64 bytes)
+	ash	#6., R0
 	add	#TilesCpuData, R0
-	mov	#39., R1		; vaddr addition
+	mov	#SCRWID-1, R1		; vaddr addition
 	; draw it
 	.rept	16.
 	mov	(R0)+, (R5)
@@ -345,28 +328,22 @@ DrawTile:
 
 ; draw floating figures
 DrawPalka:
-	; 1
 	mov	PalkaX, R1
 	asl	R1
 	add	#STAKAN_START_X, R1
 	mov	R1, TempR1
-	;
-	mov	PalkaY, R2
-	add	#STAKAN_START_Y, R2
-	movb	@#Palka, R0
+	mov	PalkaY, TempR2
+	add	#STAKAN_START_Y, TempR2
+	mov	#Palka, TempR0
+	mov	#3., TempR3
+10$:	mov	TempR1, R1
+	mov	TempR2, R2
+	movb	@TempR0, R0
 	call	DrawPalkaTile
-	; 2
-	mov	TempR1, R1
-	mov	PalkaY, R2
-	add	#STAKAN_START_Y+16., R2
-	movb	@#Palka+1, R0
-	call	DrawPalkaTile
-	; 3
-	mov	TempR1, R1
-	mov	PalkaY, R2
-	add	#STAKAN_START_Y+32., R2
-	movb	@#Palka+2, R0
-	call	DrawPalkaTile
+	add	#16., TempR2
+	inc	TempR0
+	dec	TempR3
+	bne	10$
 	return
 
 ; draw floating tile
@@ -378,10 +355,13 @@ DrawPalkaTile:
 	.ppexe	#CmdDrawPalkaTile
 	call	SetVreg
 	mov	R2, R3
-	asl	R3
-	add	LinesTable(R3), R1
-	mov	R1, (R4)
-	ash	#6., R0			; tile offset (tiles in CPU is 64 bytes)
+	; set starting vaddr
+	mul	#SCRWID, R3
+	add	R1, R3
+	add	#VADDR, R3
+	mov	R3, (R4)
+	; tile offset (tiles in CPU is 64 bytes)
+	ash	#6., R0
 	add	#TilesCpuData, R0
 	; skip undrawable
 	mov	#16., R3
@@ -389,12 +369,12 @@ DrawPalkaTile:
 	bge	20$
 	inc	R2			; Y++
 	add	#4., R0			; increase tile addr
-	add	#40., (R4)		; increase vaddr
+	add	#SCRWID, (R4)		; increase vaddr
 	dec	R3
 	beq	99$			; nothing to draw
 	br	10$
 20$:	; draw drawable %)
-	mov	#39., R1
+	mov	#SCRWID-1, R1
 30$:	mov	(R0)+, (R5)
 	inc	(R4)
 	mov	(R0)+, (R5)
@@ -421,11 +401,15 @@ DrawBlackTile:
 20$:	; draw drawable	
 	add	#STAKAN_START_Y, R2
 	.ppexe	#CmdDrawBlackTile
+	; set starting vaddr
+	mov	R2, R5	
+	mul	#SCRWID, R5
+	add	R5, R1
+	add	#VADDR, R1
 	call	SetVreg
-	asl	R2
-	add	LinesTable(R2), R1
 	mov	R1, (R4)
-	mov	#39., R1
+	; draw black lines
+	mov	#SCRWID-1, R1
 30$:	clr	(R5)
 	inc	(R4)
 	clr	(R5)
@@ -435,24 +419,19 @@ DrawBlackTile:
 
 ; draw next figure
 DrawNext:
-	mov	#STAKAN_START_X+14., R1
-	mov	#STAKAN_START_Y, R2
-	movb	@#PalkaNext, R0
+	mov	#STAKAN_START_Y, TempR2
+	mov	#PalkaNext, TempR0
+	mov	#3., TempR3
+10$:	mov	#STAKAN_START_X+14., R1
+	mov	TempR2, R2
+	movb	@TempR0, R0
 	add	TilesAddition, R0
 	.ppexe	#CmdDrawTIle
 	call	DrawTile
-	mov	#STAKAN_START_X+14., R1
-	mov	#STAKAN_START_Y+16., R2
-	movb	@#PalkaNext+1, R0
-	add	TilesAddition, R0
-	.ppexe	#CmdDrawTIle
-	call	DrawTile
-	mov	#STAKAN_START_X+14., R1
-	mov	#STAKAN_START_Y+32., R2
-	movb	@#PalkaNext+2, R0
-	add	TilesAddition, R0
-	.ppexe	#CmdDrawTIle
-	call	DrawTile
+	inc	TempR0
+	add	#16., TempR2
+	dec	TempR3
+	bne	10$
 	return
 
 ; .. it's complicated

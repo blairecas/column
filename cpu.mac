@@ -115,8 +115,9 @@ MainReset:
 	call	RedrawStakan
 	call	DrawNext
 	; print instructions and score
-	mov	LevelsInc, R0
 	.ppexe	#CmdPrintInstr
+	mov	LevelsInc, R0
+	.ppexe	#CmdPrintInstrLev
 	mov	Score, R0
 	mov	Level, R1
 	.ppexe	#CmdPrintScore
@@ -141,9 +142,8 @@ MainAwaitStart:
 	beq	20$
 	clr	KeyK3
 	com	LevelsInc
-	call	RedrawStakan
 	mov	LevelsInc, R0
-	.ppexe	#CmdPrintInstr
+	.ppexe	#CmdPrintInstrLev
 20$:	return
 
 ; 02 - start new palka
@@ -337,9 +337,11 @@ MainCheckOver:
 	; draw 'game over'
 	mov	#8.*5.+Stakan, R0
 	mov	#GamoverTiles, R1
-	mov	#12., R3
-	mov	(R1)+, (R0)+
-	sob	R3, .-2
+	mov	#24., R3
+20$:	movb	(R1)+, R2
+	sub	TilesAddition, R2
+	movb	R2, (R0)+
+	sob	R3, 20$
 	call	RedrawStakan
 	; hiscore
 	cmp	Score, Hiscore
@@ -564,19 +566,23 @@ CheckColors:
 ; key K2 - Tiles addition switch
 CheckTilesAddition:
 	tst	KeyK2
-	bne	10$
-	return
-10$:	clr	KeyK2
+	beq	99$
+	clr	KeyK2
 	tst	TilesAddition
-	beq	20$
-	clr	TilesAddition
+	bne	10$
+	mov	#6., TilesAddition
 	br	90$
-20$:	mov	#6., TilesAddition
-90$:	cmp	CurrentMode, #1.	; if not at 'awaiting start'
+10$:	cmp	#6., TilesAddition
+	bne	20$
+	mov	#12., TilesAddition
+	br	90$
+20$:	clr	TilesAddition
+	; redraw stakan/next (stakan only if not at awaiting start mode)
+90$:	cmp	CurrentMode, #1.
 	beq	92$
 	call	RedrawStakan
 92$:	call	DrawNext
-	return
+99$:	return
 
 ; can palka go down?
 CanGoDown:

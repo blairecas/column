@@ -323,40 +323,55 @@ DrawBack:
 
 
 Msg000:	.asciz	"00000"
+
 Msg001:	.asciz	<7>"  К1"<6>" Палитра"
 Msg002:	.asciz	<7>"  K2"<6>" Тайлы"
-Msg003:	.asciz	<7>" УСТ"<6>" Пауза"
-Msg004:	.asciz	<7>"СТОП"<6>" Сброс"
 Msg005:	.asciz	<7>"  K3"<6>" Уровень"
 Msg006:	.asciz	<7>" Вкл"<6>"/"<1>"Выкл"
+
+Msg003:	.asciz	<7>" УСТ"<6>" Пауза"
+Msg004:	.asciz	<7>"СТОП"<6>" Сброс"
+
 Msg007:	.asciz	<7>"  ПРОБЕЛ"<6>" СТАРТ"
 	.even
 
 ; print usage strings
 PrintInstr:
-	mov	R0, -(SP)			; levels increase flag
+	; K1
 	mov	#Msg001, R0
 	mov	#STAKAN_START_X+1, R1
 	mov	#80., R2
 	call	PrintStr
+	; K2
 	mov	#Msg002, R0
 	mov	#STAKAN_START_X+1, R1
 	mov	#90., R2
 	call	PrintStr
-	mov	#Msg003, R0
+	; K3
+	mov	#Msg005, R0
 	mov	#STAKAN_START_X+1, R1
 	mov	#100., R2
 	call	PrintStr
+	; UST
+	mov	#Msg003, R0
+	mov	#STAKAN_START_X+1, R1
+	mov	#130., R2
+	call	PrintStr
+	; STOP
 	mov	#Msg004, R0
 	mov	#STAKAN_START_X+1, R1
-	mov	#110., R2
+	mov	#140., R2
 	call	PrintStr
-	mov	#Msg005, R0
-	mov	#STAKAN_START_X+1, R1
-	mov	#120., R2
+	; SPACE
+	mov	#Msg007, R0
+	mov	#STAKAN_START_X, R1
+	mov	#160., R2
 	call	PrintStr
-	; on-off levels increase
-	mov	(SP)+, R0
+	return
+
+; on-off levels increase
+; R0 = LevelsInc from CPU
+PrintInstrLev:
 	tst	R0
 	bne	10$
 	movb	#1., @#Msg006
@@ -366,12 +381,7 @@ PrintInstr:
 	movb	#7., @#Msg006
 20$:	mov	#Msg006, R0
 	mov	#STAKAN_START_X+4, R1
-	mov	#130., R2
-	call	PrintStr
-	; press space
-	mov	#Msg007, R0
-	mov	#STAKAN_START_X, R1
-	mov	#160., R2
+	mov	#110., R2
 	call	PrintStr
 	return
 

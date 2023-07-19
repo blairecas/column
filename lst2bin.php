@@ -11,10 +11,10 @@
     $output_fname = $argv[2];
     $mode = $argv[3];
 
-    if ($mode !== 'bin' && $mode !== 'mac' && $mode !== 'sav') {
+    if ($mode !== 'bin' && $mode !== 'mac' && $mode !== 'sav' && $mode !== 'bbk') {
         echo "Usage: php.exe -f lst2bin.php in_fname out_fname mode\n";
         echo "in_fname - .lst filename\n";
-        echo "mode = bin, mac or sav";
+        echo "mode = bin, bbk, mac or sav (bbk is bin for BK-0010)";
         exit(1);
     }
 
@@ -34,6 +34,7 @@
 
     if ($mode == 'mac') WriteMac(0, $allRAM['high']);
     if ($mode == 'bin') WriteBin(0, $allRAM['high']);
+    if ($mode == 'bbk') WriteBinBk();
     if ($mode == 'sav') WriteSav();
 
     exit(0);
@@ -242,16 +243,37 @@ function WriteWord ($g, $w)
 }
 
 
+function WriteBinaryToFile($g, $start, $end)
+{
+    global $allRAM;
+	for ($i=$start; $i<=$end; $i++)
+	{
+	    $byte = 0x00;
+	    if (isset($allRAM['ram'][$i])) $byte = $allRAM['ram'][$i];
+	    $s = chr($byte); fwrite($g, $s, 1);
+	}    
+}
+
+
 function WriteBin ($start, $end)
 {
-    global $allRAM, $output_fname;
+    global $output_fname;
     $g = fopen($output_fname, 'w');
-    for ($i=$start; $i<=$end; $i++)
-    {
-        $byte = 0x00;
-        if (isset($allRAM['ram'][$i])) $byte = $allRAM['ram'][$i];
-        $s = chr($byte); fwrite($g, $s, 1);
-    }
+    WriteBinaryToFile($g, $start, $end);
+    fclose($g);
+}
+
+
+function WriteBinBk ()
+{
+    global $allRAM, $output_fname;
+    $start = 0x200;
+    $end = $allRAM['high'];
+    $length = $end - $start + 1;
+    $g = fopen($output_fname, 'w');
+    WriteWord($g, $start);
+    WriteWord($g, $length);
+    WriteBinaryToFile($g, $start, $end);
     fclose($g);
 }
 

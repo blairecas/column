@@ -286,7 +286,7 @@ RedrawStakan:
 	mov	VarY, R2
 	movb	@VarAddr2, R0		; test 'removing' animation #
 	beq	30$
-	add	#11., R0		; we are removing figure
+	add	#17., R0		; we are removing figure
 	br	40$
 30$:	movb	@VarAddr, R0		; base tile #
 	add	TilesAddition, R0

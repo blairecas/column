@@ -114,6 +114,7 @@ CommandsTable:
 	.word	DrawBack		; 11. unpack blue background plane-0 to vram
 	.word	PrintInstr		; 12. print instructions
 	.word	PrintScore		; 13. print score
+	.word	PrintInstrLev		; 14. print levels on|off
 
 	
 ; //////////////////////////////////////////////////////////////////////////////

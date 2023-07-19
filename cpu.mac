@@ -276,7 +276,7 @@ MainPalkaFix:
 
 ; 05 - figures are dropping down
 MainDropDown:
-	bit	#^B11, FrameCount	; every 4th frame
+	bit	#^B1, FrameCount	; every 2nd frame
 	bne	99$
 	call	RedrawStakan
 	call	DropStakan

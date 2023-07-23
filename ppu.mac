@@ -115,6 +115,7 @@ CommandsTable:
 	.word	PrintInstr		; 12. print instructions
 	.word	PrintScore		; 13. print score
 	.word	PrintInstrLev		; 14. print levels on|off
+	.word	PlaySound2		; 15. simple sound
 
 	
 ; //////////////////////////////////////////////////////////////////////////////
@@ -420,6 +421,50 @@ MusCountHi:
 	tst	@#177714
 	rti		
 
+; //////////////////////////////////////////////////////////////////////////////
+; // Very simple sound 
+; //////////////////////////////////////////////////////////////////////////////
+
+; play sound (R0 = #)
+PlaySound2:
+	asl	R0
+	mov	Sound2Tab(R0), R0
+	mov	#^B1111111100000000, R2
+10$:	movb	(R0)+, R3
+	bic	R2, R3
+	beq	90$
+	bis	#200, @#177716
+20$:	nop
+	nop
+	nop
+	sob	R3, 20$
+	movb	(R0)+, R3
+	bic	R2, R3
+	beq	90$
+	bic	#200, @#177716
+30$:	nop
+	nop
+	nop
+	sob	R3, 30$
+	br	10$
+90$:	return
+
+Sound2Tab:
+	.word	Snd2000, Snd2001, Snd2002
+
+.radix 10
+Snd2000:	.byte	10,10,20,20,50,50,50,50,50,50
+		.byte	0
+Snd2001:	.byte	25,25,25,25,25,25,25,25,25,25,25,25,25,25,25,25
+		.byte	50,50,50,50,50,50,50,50
+		.byte	100,100,100,100
+		.byte	200,200,200,200
+		.byte	0
+Snd2002:	.byte	1,146,30,60,4,170,,5,8,4,10,50,140,90,22,28,3,80,150,40,90,54
+		.byte	0
+		.even
+.radix 8
+
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // KEYBOARD
@@ -625,7 +670,7 @@ SND_PAUSE_TIMER	= 50*256
 SndTab:	.word	0, SND001, SND002, SND003
 
 ; london bridge is falling down..
-SND001:	.word	SND_TONE, 16, 01*256, 0,	125, 5,  125, 5
+SND001:	.word	SND_TONE, 06, 15*127, -2,	110, 60,  10, -60
 	.word	0
 ; figures popping
 SND002:	.word	SND_TONE, 05, 01*256, 0,	10, 1, 100, -15

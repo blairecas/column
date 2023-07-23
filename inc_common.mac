@@ -16,6 +16,7 @@ CmdDrawBack       = 11.		; unpack blue background plane-0 to vram
 CmdPrintInstr     = 12.		; print usage instructions
 CmdPrintScore     = 13.		; print score
 CmdPrintInstrLev  = 14.		; print levels on|off
+CmdPlaySound2     = 15.		; simple sound
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Drawing 

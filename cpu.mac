@@ -227,8 +227,10 @@ MainPalkaFall:
 	tst	KeyUp
 	beq	60$
 	clr	KeyUp
-	mov	#3, R0
-	.ppexe	#CmdSoundPlay
+	;mov	#3, R0
+	;.ppexe	#CmdSoundPlay
+	clr	R0
+	.ppexe	#CmdPlaySound2
 	movb	@#Palka, @#Palka+3
 	movb	@#Palka+1, @#Palka
 	movb	@#Palka+2, @#Palka+1
@@ -240,8 +242,10 @@ MainPalkaFall:
 	; already at max speed?
 	cmp	#8.*4., PalkaSpeed
 	ble	70$
-	mov	#1., R0
-	.ppexe	#CmdSoundPlay
+	;mov	#1., R0
+	;.ppexe	#CmdSoundPlay
+	mov	#1, R0
+	.ppexe	#CmdPlaySound2
 	mov	#8.*4., PalkaSpeed
 70$:
 	return
@@ -363,8 +367,10 @@ MainDrawRemove:
 	bne	2$
 	tst	LevelMusic		; maybe we are playing music instead
 	bne	2$
-	mov	#2, R0			; play 'removing' sound
-	.ppexe	#CmdSoundPlay
+	;mov	#2, R0			; play 'removing' sound
+	;.ppexe	#CmdSoundPlay
+	mov	#2, R0
+	.ppexe	#CmdPlaySound2
 2$:	call	RedrawStakan
 	mov	#Stakan, R0
 	mov	#Stakan2, R1

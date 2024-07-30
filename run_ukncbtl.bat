@@ -1,1 +1,1 @@
-start ..\..\ukncbtl\ukncbtl /autostart /boot:1
+start ..\..\ukncbtl\ukncbtl /autostart /disk0:C:\Projects\uknc\00_code\column\column.dsk /boot1

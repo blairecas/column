@@ -1,9 +1,9 @@
+*.log
 *.lst
 *.obj
 *.dat
 *.zip
 *.bin
-_cpu.mac
-_ppu.mac
+_*.*
 system.dsk
 rt11.exe

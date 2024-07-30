@@ -251,7 +251,6 @@ SndStart:
 	mov	#SndIntHi, @#304	; set next sound interrupt to high signal proc
 	mov	SndLLo, @#177712	; low signal duration
 30$:	tst	@#177714
-	tst	@#177714
 	bis	#^B01000101, @#177710	; allow int, start, timer = 8mks
 99$:	mtps	#0
 	return
@@ -294,7 +293,6 @@ SndIntPause:
 	; still pause
 90$:	mov	#SND_PAUSE_TIMER, @#177712	; set default pause timer
 99$:	tst	@#177714
-	tst	@#177714
 	rti
 
 
@@ -330,14 +328,12 @@ SndIntLo:
 	br	99$
 90$:	mov	SndLLo, @#177712
 99$:	tst	@#177714
-	tst	@#177714
 	rti
 
 SndIntHi:
 	mov	#200, @#177716		; set high level
 	mov	#SndIntLo, @#304	; next tick will be low
 	mov	SndLHi, @#177712
-	tst	@#177714
 	tst	@#177714
 	rti
 
@@ -359,7 +355,6 @@ MusStart:
 	asl	R1
 	mov	NOTPAD(R1), @#177712	; initial counter
 	mov	R0, MUSCUR		; first note addr
-	tst	@#177714
 	tst	@#177714
 	mov	#MusIntLo, @#304	; set music interrupt
 	bis	#^B01000011, @#177710	; allow int, start, timer = 4mks
@@ -389,7 +384,6 @@ MusPro:	tst	MUSCUR			; current note addr
 	mov	#200, MusIntHi+2	; set #200 in high in case we cleared it
 	mov	R1, @#177712		; set music interrupt timer
 	tst	@#177714		; maybe better way here is  
-	tst	@#177714		; TST @#177714, BNE .-4
 	br	99$
 10$:	; stop ticking beeper
 	clr	MusIntHi+2		; clear #200 - so it will not tick high
@@ -408,7 +402,6 @@ MusCountLo:
 	mov	#000000, @#177712	; set new timer as duty changed
 	add	#2, MusCountLo+2	; change duty
 	tst	@#177714		; TWO (!) times is important I think
-	tst	@#177714
 	rti
 ; same as above just for high signal level
 MusIntHi:
@@ -418,8 +411,8 @@ MusCountHi:
 	mov	#000000, @#177712
 	sub	#2, MusCountHi+2	; do we need to test it for close to 0?
 	tst	@#177714
-	tst	@#177714
 	rti		
+
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Very simple sound 

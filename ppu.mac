@@ -1,6 +1,7 @@
 	.title	PPU
 	.enabl	LC,AMA	; local labels, absolute addr mode
 	.list	MEB	; enable macro-extensions binary listing
+
 	.asect
 	.=0	; from address 0 (!)
 

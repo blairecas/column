@@ -1,1 +1,1 @@
-start ..\..\ukncbtl\ukncbtl /autostart /disk0:..\..\00_code\column\column.dsk /boot1
+start ..\..\ukncbtl\ukncbtl /autostart /disk0:..\..\00_code\column\release\column.dsk /boot1

@@ -40,10 +40,10 @@ echo ===========================================================================
 php -f ../scripts/lst2bin.php _cpu.lst ./release/column.sav sav
 if %ERRORLEVEL% NEQ 0 ( exit /b )
 
-..\scripts\rt11dsk.exe d column.dsk .\release\column.sav >NUL
-..\scripts\rt11dsk.exe a column.dsk .\release\column.sav >NUL
+..\scripts\rt11dsk d .\release\column.dsk column.sav >NUL
+..\scripts\rt11dsk a .\release\column.dsk .\release\column.sav >NUL
 
-..\scripts\rt11dsk.exe d ..\..\03_dsk\hdd.dsk .\release\column.sav >NUL
+..\scripts\rt11dsk.exe d ..\..\03_dsk\hdd.dsk column.sav >NUL
 ..\scripts\rt11dsk.exe a ..\..\03_dsk\hdd.dsk .\release\column.sav >NUL
 
 del _cpu.lst
